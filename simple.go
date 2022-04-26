@@ -2,7 +2,7 @@ package mcache
 
 // #cgo LDFLAGS: -L. -lstdc++
 // #cgo CXXFLAGS: -std=c++17 -I.
-// #include "./mcache/src/simple.h"
+// #include "./mcache/src/mcache.h"
 import "C"
 import (
 	"sync"
