@@ -5,6 +5,6 @@
 #include <stdlib.h>
 
 typedef char t_key;
-typedef void *t_value;
+typedef void *t_val;
 
 #endif

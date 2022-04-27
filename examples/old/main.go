@@ -7,15 +7,15 @@ typedef struct User {
 	int number;
 } User;
 
-void User_SetId(void *user, int id) {
+static void User_SetId(void *user, int id) {
 	((User *)user)->id = id;
 }
 
-void User_SetAge(void *user, int age) {
+static void User_SetAge(void *user, int age) {
 	((User *)user)->age = age;
 }
 
-void User_SetNumber(void *user, int number) {
+static void User_SetNumber(void *user, int number) {
 	((User *)user)->number = number;
 }
 */

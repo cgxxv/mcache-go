@@ -3,10 +3,10 @@ package mcache
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -30,9 +30,10 @@ func TestSimpleSetWithExpire(t *testing.T) {
 	)
 
 	key := randString(40)
-	val := rnd.Intn(math.MaxInt64)
+	// val := rnd.Intn(math.MaxInt64)
+	val := rnd.Intn(10)
 
-	mc.set(ctx, key, val, nil)
+	mc.set(ctx, key, unsafe.Pointer(&val), nil)
 	value, err := mc.get(ctx, key)
 	assert.Nil(t, err)
 	assert.Equal(t, val, value)
