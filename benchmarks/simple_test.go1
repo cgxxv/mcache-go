@@ -1,0 +1,84 @@
+package mcache
+
+import (
+	"fmt"
+	"math"
+	"math/rand"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+const (
+	cacheSize = 150000
+	runTimes2 = 1000000
+)
+
+var (
+	mc2          = New(cacheSize, WithCacheType(TYPE_LRU), WithExp(cacheExpired))
+	cacheExpired = 24 * 60 * 60 * time.Second
+	rnd          = rand.New(rand.NewSource(time.Now().UnixNano()))
+)
+
+func init() {
+	for i := 0; i < cacheSize; i++ {
+		key := randString(40)
+		val := rnd.Intn(math.MaxInt64)
+		mc2.Set(ctx, key, val)
+	}
+	mc2.dump()
+}
+
+func TestSimpleSetWithExpire(t *testing.T) {
+	var (
+		wg    sync.WaitGroup
+		c10   int32
+		c20   int32
+		c30   int32
+		c50   int32
+		c100  int32
+		c200  int32
+		c300  int32
+		c500  int32
+		c1000 int32
+	)
+	for i := 0; i < runTimes2; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			st := time.Now()
+			mc2.Set(ctx, randString(40), rnd.Intn(cacheSize))
+			cost := time.Now().Sub(st).Milliseconds()
+			if cost >= 1000 {
+				atomic.AddInt32(&c1000, 1)
+			} else if cost >= 500 {
+				atomic.AddInt32(&c500, 1)
+			} else if cost >= 300 {
+				atomic.AddInt32(&c300, 1)
+			} else if cost >= 200 {
+				atomic.AddInt32(&c200, 1)
+			} else if cost >= 100 {
+				atomic.AddInt32(&c100, 1)
+			} else if cost >= 50 {
+				atomic.AddInt32(&c50, 1)
+			} else if cost >= 30 {
+				atomic.AddInt32(&c30, 1)
+			} else if cost >= 20 {
+				atomic.AddInt32(&c20, 1)
+			} else {
+				atomic.AddInt32(&c10, 1)
+			}
+		}(i)
+	}
+	wg.Wait()
+	fmt.Println("cost 1000: ", c1000)
+	fmt.Println("cost  500: ", c500)
+	fmt.Println("cost  300: ", c300)
+	fmt.Println("cost  200: ", c200)
+	fmt.Println("cost  100: ", c100)
+	fmt.Println("cost   50: ", c50)
+	fmt.Println("cost   30: ", c30)
+	fmt.Println("cost   20: ", c20)
+	fmt.Println("cost   10: ", c10)
+}
