@@ -23,7 +23,7 @@ var (
 	ctx = context.TODO()
 )
 
-func TestSimpleSetWithExpire(t *testing.T) {
+func TestSimpleCache(t *testing.T) {
 	var (
 		mc  = &simpleCache{}
 		rnd = rand.New(rand.NewSource(time.Now().UnixNano()))

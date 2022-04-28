@@ -25,16 +25,26 @@ func (m *simpleCache) init(_cap uint) {
 
 func (m *simpleCache) set(ctx context.Context, key string, val unsafe.Pointer, o *options) error {
 	ck := C.CString(key)
-	defer C.free(unsafe.Pointer(ck))
-	ret := int(C.simple_put(C.simple(unsafe.Pointer(m.simple)), ck, &val))
+	// defer C.free(unsafe.Pointer(ck))
+
+	tk := C.t_key(ck)
+	// defer C.free(unsafe.Pointer(tk))
+	tv := C.t_val(val)
+	// defer C.free(unsafe.Pointer(tv))
+
+	ret := uint(C.simple_put(m.simple, &tk, &tv))
 	println(ret)
 	return nil
 }
 
 func (m *simpleCache) get(ctx context.Context, key string) (unsafe.Pointer, error) {
 	ck := C.CString(key)
-	defer C.free(unsafe.Pointer(ck))
-	val := C.simple_get(C.simple(unsafe.Pointer(m.simple)), ck)
+	// defer C.free(unsafe.Pointer(ck))
+
+	tk := C.t_key(ck)
+	// defer C.free(unsafe.Pointer(tk))
+
+	val := C.simple_get(m.simple, &tk)
 	if val != nil {
 		return unsafe.Pointer(val), nil
 	}
@@ -45,23 +55,31 @@ func (m *simpleCache) get(ctx context.Context, key string) (unsafe.Pointer, erro
 func (m *simpleCache) has(ctx context.Context, key string) bool {
 	ck := C.CString(key)
 	defer C.free(unsafe.Pointer(ck))
-	return C.simple_has(C.simple(unsafe.Pointer(m.simple)), ck) == 1
+
+	tk := C.t_key(ck)
+	defer C.free(unsafe.Pointer(tk))
+
+	return C.simple_has(m.simple, &tk) == 1
 }
 
 func (m *simpleCache) remove(ctx context.Context, key string) bool {
 	ck := C.CString(key)
 	defer C.free(unsafe.Pointer(ck))
-	return C.simple_remove(C.simple(unsafe.Pointer(m.simple)), ck) == 1
+
+	tk := C.t_key(ck)
+	defer C.free(unsafe.Pointer(tk))
+
+	return C.simple_remove(m.simple, &tk) == 1
 }
 
 func (m *simpleCache) evict(ctx context.Context, count int) {
-	C.simple_evict(C.simple(unsafe.Pointer(m.simple)), C.int(count))
+	C.simple_evict(m.simple, C.int(count))
 }
 
 func (m *simpleCache) size(ctx context.Context) uint64 {
-	return uint64(C.simple_size(C.simple(unsafe.Pointer(m.simple))))
+	return uint64(C.simple_size(m.simple))
 }
 
 func (m *simpleCache) debug() {
-	C.simple_debug(C.simple(unsafe.Pointer(m.simple)))
+	C.simple_debug(m.simple)
 }
