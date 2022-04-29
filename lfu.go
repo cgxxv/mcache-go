@@ -37,7 +37,7 @@ func (c *lfuCache) set(ctx context.Context, key string, val interface{}, ttl tim
 	if ok {
 		item.value = value
 	} else {
-		c.evict(1)
+		c.evict(ctx, 1)
 		item = &lfuItem{
 			clock:       c.clock,
 			key:         key,
@@ -71,7 +71,7 @@ func (c *lfuCache) get(ctx context.Context, key string) (interface{}, error) {
 	return nil, KeyNotFoundError
 }
 
-func (c *lfuCache) evict(count int) {
+func (c *lfuCache) evict(ctx context.Context, count int) {
 	if len(c.items) < c.cap {
 		return
 	}
@@ -93,7 +93,7 @@ func (c *lfuCache) evict(count int) {
 	}
 }
 
-func (c *lfuCache) has(key string) bool {
+func (c *lfuCache) has(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if !ok {
 		return false
@@ -101,7 +101,7 @@ func (c *lfuCache) has(key string) bool {
 	return !item.IsExpired()
 }
 
-func (c *lfuCache) remove(key string) bool {
+func (c *lfuCache) remove(ctx context.Context, key string) bool {
 	if item, ok := c.items[key]; ok {
 		c.removeItem(item)
 		return true

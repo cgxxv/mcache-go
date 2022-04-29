@@ -101,11 +101,6 @@ func (c *baseCache) getOption(opts ...Option) *options {
 	return o
 }
 
-func (c *baseCache) load(ctx context.Context, key string, cb func(context.Context, interface{}, error) (interface{}, error), o *options) (interface{}, error) {
-	cbVal, cbErr := o.RealLoaderFunc(ctx, key)
-	return cb(ctx, cbVal, cbErr)
-}
-
 type CacheBuilder struct {
 	baseCache
 }

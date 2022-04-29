@@ -22,12 +22,12 @@ type Cache interface {
 
 	Remove(ctx context.Context, key string) bool
 	MRemove(ctx context.Context, keys []string) bool
-	HasLocal(ctx context.Context, key string) bool
+	Exists(ctx context.Context, key string) bool
 
 	//only for debug
 	getFromLocal2(ctx context.Context, key string, onLoad bool) (interface{}, error)
 	getFromLocal(ctx context.Context, key string, onLoad bool) (interface{}, error)
-	remove(key string) bool
+	remove(ctx context.Context, key string) bool
 	serializer
 }
 

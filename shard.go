@@ -13,9 +13,9 @@ type Shard interface {
 	init(clock Clock)
 	set(ctx context.Context, key string, val interface{}, ttl time.Duration) error
 	get(ctx context.Context, key string) (interface{}, error)
-	has(key string) bool
-	remove(key string) bool
-	evict(count int)
+	has(ctx context.Context, key string) bool
+	remove(ctx context.Context, key string) bool
+	evict(ctx context.Context, count int)
 
 	sync.Locker
 }
@@ -74,7 +74,7 @@ func (c *baseShard) purge() {
 				}
 				s := c.shards[i]
 				s.Lock()
-				s.evict(1)
+				s.evict(nil, 1)
 				s.Unlock()
 			}
 
@@ -142,12 +142,33 @@ func (c *baseShard) Get(ctx context.Context, key string, opts ...Option) (interf
 	s.Lock()
 	defer s.Unlock()
 
-	v, err := s.get(ctx, key)
+	val, err := s.get(ctx, key)
 	if err == KeyNotFoundError {
-		return c.getWithLoader(ctx, key, o)
+		if o.RealLoaderFunc == nil {
+			return nil, KeyNotFoundError
+		}
+
+		val, err := o.RealLoaderFunc(ctx, key)
+		if err != nil {
+			if !errors.Is(err, DefValSetError) {
+				return nil, err
+			}
+
+			if errors.Is(err, DefValSetError) {
+				o.TTL = time.Minute
+			}
+
+			if err := s.set(ctx, key, val, o.TTL); err != nil {
+				return nil, err
+			}
+
+			if errors.Is(err, DefValSetError) {
+				return val, err
+			}
+		}
 	}
 
-	return v, nil
+	return val, nil
 }
 
 func (c *baseShard) MGet(ctx context.Context, keys []string, opts ...Option) (map[string]interface{}, error) {
@@ -157,21 +178,47 @@ func (c *baseShard) MGet(ctx context.Context, keys []string, opts ...Option) (ma
 	o := c.getOption(opts...)
 
 	res := make(map[string]interface{}, len(keys))
+	miss := make(map[string]Shard, len(keys))
 	for _, key := range keys {
 		s := c.getShard(key)
 		s.Lock()
 		val, err := s.get(ctx, key)
 		if err == nil {
 			res[key] = val
-			s.Unlock()
 		} else if err == KeyNotFoundError {
+			miss[key] = s
+		}
+		s.Unlock()
+	}
+
+	if len(miss) > 0 {
+		if o.RealMLoaderFunc == nil {
+			goto END
+		}
+
+		keys := make([]string, 0, len(miss))
+		for key := range miss {
+			keys = append(keys, key)
+		}
+		kvs, err := o.RealMLoaderFunc(ctx, keys)
+		if err != nil {
+			goto END
+		}
+
+		for key, val := range kvs {
+			s := miss[key]
+			s.Lock()
+			err := s.set(ctx, key, val, o.TTL)
 			s.Unlock()
-			if val, err := c.getWithLoader(ctx, key, o); err == nil {
-				res[key] = val
+			if err != nil {
+				goto END
 			}
+
+			res[key] = val
 		}
 	}
 
+END:
 	return res, nil
 }
 
@@ -190,7 +237,7 @@ func (c *baseShard) Remove(ctx context.Context, key string) bool {
 	s.Lock()
 	defer s.Unlock()
 
-	return s.remove(key)
+	return s.remove(ctx, key)
 }
 
 func (c *baseShard) MRemove(ctx context.Context, keys []string) bool {
@@ -207,7 +254,7 @@ func (c *baseShard) MRemove(ctx context.Context, keys []string) bool {
 	for _, key := range keys {
 		s := c.getShard(key)
 		s.Lock()
-		if !s.remove(key) {
+		if !s.remove(ctx, key) {
 			s.Unlock()
 			return false
 		}
@@ -217,7 +264,7 @@ func (c *baseShard) MRemove(ctx context.Context, keys []string) bool {
 	return true
 }
 
-func (c *baseShard) HasLocal(ctx context.Context, key string) bool {
+func (c *baseShard) Exists(ctx context.Context, key string) bool {
 	atomic.AddInt32(&c.procs, 1)
 	defer atomic.AddInt32(&c.procs, -1)
 
@@ -225,40 +272,7 @@ func (c *baseShard) HasLocal(ctx context.Context, key string) bool {
 	s.Lock()
 	defer s.Unlock()
 
-	return s.has(key)
-}
-
-func (c *baseShard) getWithLoader(ctx context.Context, key string, o *options) (interface{}, error) {
-	if o.RealLoaderFunc == nil {
-		return nil, KeyNotFoundError
-	}
-
-	value, err := c.load(ctx, key, func(ctx context.Context, v interface{}, e error) (interface{}, error) {
-		if e != nil && !errors.Is(e, DefValSetError) {
-			return nil, e
-		}
-
-		atomic.AddInt32(&c.procs, 1)
-		defer atomic.AddInt32(&c.procs, -1)
-
-		if errors.Is(e, DefValSetError) {
-			o.TTL = time.Minute
-		}
-
-		s := c.getShard(key)
-		if err := s.set(ctx, key, v, o.TTL); err != nil {
-			return nil, err
-		}
-		return v, nil
-	}, o)
-
-	if err != nil && !errors.Is(err, DefValSetError) {
-		return nil, err
-	} else if errors.Is(err, DefValSetError) {
-		return value, err
-	}
-
-	return value, nil
+	return s.has(ctx, key)
 }
 
 func (c *baseShard) getFromLocal2(ctx context.Context, key string, onLoad bool) (interface{}, error) {
@@ -322,7 +336,7 @@ func (c *baseShard) deserialize(ctx context.Context, data []byte, opts ...Option
 	return nil, errors.New("mcache: must set WithSafeValPtrFunc option!")
 }
 
-func (c *baseShard) remove(key string) bool {
+func (c *baseShard) remove(ctx context.Context, key string) bool {
 	atomic.AddInt32(&c.procs, 1)
 	defer atomic.AddInt32(&c.procs, -1)
 
@@ -330,5 +344,5 @@ func (c *baseShard) remove(key string) bool {
 	s.Lock()
 	defer s.Unlock()
 
-	return s.remove(key)
+	return s.remove(ctx, key)
 }

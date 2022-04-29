@@ -124,7 +124,7 @@ func (c *arcCache) get(ctx context.Context, key string) (interface{}, error) {
 	return nil, KeyNotFoundError
 }
 
-func (c *arcCache) has(key string) bool {
+func (c *arcCache) has(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if !ok {
 		return false
@@ -132,7 +132,7 @@ func (c *arcCache) has(key string) bool {
 	return !item.IsExpired()
 }
 
-func (c *arcCache) remove(key string) bool {
+func (c *arcCache) remove(ctx context.Context, key string) bool {
 	if elt := c.t1.Lookup(key); elt != nil {
 		c.t1.Remove(key, elt)
 		delete(c.items, key)
@@ -150,7 +150,7 @@ func (c *arcCache) remove(key string) bool {
 	return false
 }
 
-func (c *arcCache) evict(count int) {
+func (c *arcCache) evict(ctx context.Context, count int) {
 	if c.isCacheFull() && c.t1.Len()+c.b1.Len() == c.cap {
 		pop := c.t1.RemoveTail()
 		delete(c.items, pop)

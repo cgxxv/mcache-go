@@ -33,8 +33,7 @@ func (c *simpleCache) set(ctx context.Context, key string, val interface{}, ttl 
 		item.value = value
 		entry.priority = item.expireAt.UnixNano()
 	} else {
-
-		c.evict(1)
+		c.evict(ctx, 1)
 		exp := c.clock.Now().Add(defaultExpireAt)
 		item = &simpleItem{
 			clock:    c.clock,
@@ -59,7 +58,7 @@ func (c *simpleCache) set(ctx context.Context, key string, val interface{}, ttl 
 	return nil
 }
 
-func (c *simpleCache) evict(count int) {
+func (c *simpleCache) evict(ctx context.Context, count int) {
 	if len(c.items) < c.cap {
 		return
 	}
@@ -93,7 +92,7 @@ func (c *simpleCache) get(ctx context.Context, key string) (interface{}, error) 
 	return nil, KeyNotFoundError
 }
 
-func (c *simpleCache) has(key string) bool {
+func (c *simpleCache) has(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if !ok {
 		return false
@@ -101,7 +100,7 @@ func (c *simpleCache) has(key string) bool {
 	return !item.IsExpired()
 }
 
-func (c *simpleCache) remove(key string) bool {
+func (c *simpleCache) remove(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if ok {
 		delete(c.items, key)
@@ -118,8 +117,7 @@ type simpleItem struct {
 	index    int
 }
 
-func (si *simpleItem) IsExpired() bool {
-
+func (si simpleItem) IsExpired() bool {
 	return si.expireAt.Before(si.clock.Now())
 }
 
@@ -130,7 +128,7 @@ type simpleEntry struct {
 	index    int
 }
 
-type simplepq []*simpleEntry
+type simplepq []simpleEntry
 
 func (pq simplepq) Len() int { return len(pq) }
 
@@ -148,7 +146,7 @@ func (pq simplepq) Swap(i, j int) {
 
 func (pq *simplepq) Push(x interface{}) {
 	n := len(*pq)
-	entry := x.(*simpleEntry)
+	entry := x.(simpleEntry)
 	entry.index = n
 	*pq = append(*pq, entry)
 }
@@ -157,7 +155,7 @@ func (pq *simplepq) Pop() interface{} {
 	old := *pq
 	n := len(old)
 	entry := old[n-1]
-	old[n-1] = nil
+	old[n-1] = simpleEntry{}
 	entry.index = -1
 	*pq = old[0 : n-1]
 	return entry
