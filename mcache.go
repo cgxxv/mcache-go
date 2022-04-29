@@ -8,8 +8,6 @@ import (
 )
 
 type cache struct {
-	typ         string
-	name        string
 	clock       Clock
 	size        int
 	shardCount  int
@@ -108,71 +106,52 @@ type builder[T any, P CachePolicy[T]] struct {
 
 func New[T any, P CachePolicy[T]](size int, opts ...Option) Cache {
 	o := options{
-		Typ:      typeSimple,
 		RedisCli: RedisCli{},
 	}
 	for _, opt := range opts {
 		opt(&o)
 	}
-	if !o.check() {
-		panic("mcache: build option check fail")
-	}
 
-	cb := &builder[T, P]{
+	b := &builder[T, P]{
 		cache{
 			size:  size,
 			clock: NewRealClock(),
 		},
 	}
-	if cb.size == 0 {
-		cb.size = defaultCacheSize
+	if b.size == 0 {
+		b.size = defaultCacheSize
 	}
-	cb.shardCount = int(math.Ceil(float64(cb.size) / float64(defaultShardCap)))
-	if cb.shardCount == 0 {
-		cb.shardCount = defaultShardCount
+	b.shardCount = int(math.Ceil(float64(b.size) / float64(defaultShardCap)))
+	if b.shardCount == 0 {
+		b.shardCount = defaultShardCount
 	}
-	cb.shardCap = cb.size / cb.shardCount
-	if cb.shardCap == 0 {
-		cb.shardCap = defaultShardCap
+	b.shardCap = b.size / b.shardCount
+	if b.shardCap == 0 {
+		b.shardCap = defaultShardCap
 	}
-	cb.formatByOpts(o)
+	b.formatByOpts(o)
 
-	return cb.build()
+	return newCacheHandler(b)
 }
 
-func (cb *builder[T, P]) formatByOpts(o options) {
-	cb.typ = o.Typ
-	cb.name = o.Name
+func (b *builder[T, P]) formatByOpts(o options) {
 	if o.LoaderFunc != nil {
-		cb.loaderFunc = o.LoaderFunc
+		b.loaderFunc = o.LoaderFunc
 	}
 	if o.MLoaderFunc != nil {
-		cb.mLoaderFunc = o.MLoaderFunc
+		b.mLoaderFunc = o.MLoaderFunc
 	}
 	if o.TTL > 0 {
-		cb.expiration = o.TTL
+		b.expiration = o.TTL
 	}
 	if &o.RedisCli != nil {
-		cb.redisCli = o.RedisCli
+		b.redisCli = o.RedisCli
 	}
 	if o.serializeFunc != nil && o.deserializeFunc != nil {
-		cb.serializeFunc = o.serializeFunc
-		cb.deserializeFunc = o.deserializeFunc
+		b.serializeFunc = o.serializeFunc
+		b.deserializeFunc = o.deserializeFunc
 	}
 	if o.DefaultVal != nil {
-		cb.defaultVal = o.DefaultVal
+		b.defaultVal = o.DefaultVal
 	}
-}
-
-func (cb *builder[T, P]) Clock(clock Clock) *builder[T, P] {
-	cb.clock = clock
-	return cb
-}
-
-func (cb *builder[T, P]) build() Cache {
-	if cb.name == "" {
-		cb.name = cb.typ
-	}
-
-	return newCacheHandler(cb)
 }

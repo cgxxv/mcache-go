@@ -13,8 +13,6 @@ import (
 type Option func(*options)
 
 type options struct {
-	Name            string
-	Typ             string
 	RedisCli        RedisCli
 	TTL             time.Duration
 	LoaderFunc      LoaderFunc
@@ -28,33 +26,13 @@ type options struct {
 	deserializeFunc deserializeFunc
 }
 
-func (o *options) check() bool {
-	if o.Typ != typeSimple && o.Typ != typeArc && o.Typ != typeLfu && o.Typ != typeLru {
-		panic("mcache: Unknown type " + o.Typ)
-	}
-
-	return true
-}
-
-func WithName(name string) Option {
-	return func(o *options) {
-		o.Name = name
-	}
-}
-
-func WithCacheType(typ string) Option {
-	return func(o *options) {
-		o.Typ = typ
-	}
-}
-
 func WithRedisClient(client *redis.Client) Option {
 	return func(o *options) {
 		o.RedisCli = RedisCli{client}
 	}
 }
 
-func WithSafeValPtrFn(valPtrFunc valPtrFunc) Option {
+func WithUnSafeValBind(valPtrFunc valPtrFunc) Option {
 	return func(o *options) {
 		var s = newMsgpackSerializer()
 		o.serializeFunc = func(ctx context.Context, val interface{}) (bs []byte, err error) {

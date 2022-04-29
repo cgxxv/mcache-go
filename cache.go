@@ -40,11 +40,6 @@ type (
 )
 
 const (
-	typeSimple = "simple"
-	typeLru    = "lru"
-	typeLfu    = "lfu"
-	typeArc    = "arc"
-
 	defaultCacheSize  = 1 << 7                  //默认缓存容量
 	defaultShardCap   = 1 << 6                  //默认单片容量
 	defaultShardCount = 1 << 5                  //默认分片数量

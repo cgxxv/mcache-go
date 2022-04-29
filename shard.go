@@ -28,9 +28,9 @@ type cacheHandler[T any, P CachePolicy[T]] struct {
 	procs  int32
 }
 
-func newCacheHandler[T any, P CachePolicy[T]](cb *builder[T, P]) Cache {
+func newCacheHandler[T any, P CachePolicy[T]](b *builder[T, P]) Cache {
 	c := &cacheHandler[T, P]{}
-	c.cache = cb.cache
+	c.cache = b.cache
 
 	c.shards = make([]P, c.shardCount)
 	for i := 0; i < c.shardCount; i++ {
