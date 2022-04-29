@@ -20,12 +20,12 @@ type arcCache struct {
 	b2   *arcList
 }
 
-func (c *arcCache) init(clock Clock) {
+func (c *arcCache) init(clock Clock, capacity int) {
 	c.clock = clock
-	c.items = make(map[string]arcItem, defaultShardCap)
-	c.cap = defaultShardCap
+	c.items = make(map[string]arcItem, capacity)
+	c.cap = capacity
 
-	l := defaultShardCap / 2
+	l := capacity / 2
 	c.t1 = newarcCacheList(l)
 	c.t2 = newarcCacheList(c.cap - l)
 	c.b1 = newarcCacheList(c.cap - l)

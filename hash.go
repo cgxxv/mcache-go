@@ -2,6 +2,8 @@ package mcache
 
 import (
 	"unsafe"
+
+	"github.com/cespare/xxhash/v2"
 )
 
 //go:noescape
@@ -55,7 +57,11 @@ func MemHashString(str string) uint64 {
 	return uint64(memhash(ss.str, 0, uintptr(ss.len)))
 }
 
-func fnv32(key []byte) uint32 {
+func XXHashString(str string) uint64 {
+	return xxhash.Sum64String(str)
+}
+
+func Fnv32(key []byte) uint32 {
 	hash := uint32(2166136261)
 	const prime32 = uint32(16777619)
 	keyLength := len(key)

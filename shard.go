@@ -10,7 +10,7 @@ import (
 )
 
 type Shard interface {
-	init(clock Clock)
+	init(clock Clock, capacity int)
 	set(ctx context.Context, key string, val interface{}, ttl time.Duration) error
 	get(ctx context.Context, key string) (interface{}, error)
 	has(ctx context.Context, key string) bool
@@ -46,7 +46,7 @@ func newShard(cb *CacheBuilder) Cache {
 		default:
 			panic("unreachable")
 		}
-		s.init(c.clock)
+		s.init(c.clock, c.shardCap)
 
 		c.shards[i] = s
 	}
@@ -272,7 +272,7 @@ func (c *baseShard) Exists(ctx context.Context, key string) bool {
 }
 
 func (c *baseShard) getShard(key string) Shard {
-	return c.shards[MemHashString(key)&uint64(c.shardCount)]
+	return c.shards[MemHashString(key)&uint64(c.shardCount-1)]
 }
 
 func (c *baseShard) getFromLocal2(ctx context.Context, key string, onLoad bool) (interface{}, error) {

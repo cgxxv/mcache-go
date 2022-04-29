@@ -14,7 +14,7 @@ func TestSimpleCache(t *testing.T) {
 		fc  = NewFakeClock()
 		cc  = &simpleCache{}
 	)
-	cc.init(fc)
+	cc.init(fc, 5)
 
 	val, err := cc.get(ctx, "key")
 	assert.NotNil(t, err)

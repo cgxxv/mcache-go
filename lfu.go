@@ -20,11 +20,11 @@ type freqEntry struct {
 	items map[string]*lfuItem
 }
 
-func (c *lfuCache) init(clock Clock) {
+func (c *lfuCache) init(clock Clock, capacity int) {
 	c.clock = clock
-	c.items = make(map[string]lfuItem, defaultShardCap)
+	c.items = make(map[string]lfuItem, capacity)
 	c.freqList = list.New()
-	c.cap = defaultShardCap
+	c.cap = capacity
 	c.freqList.PushFront(&freqEntry{
 		freq:  0,
 		items: make(map[string]*lfuItem, 8),

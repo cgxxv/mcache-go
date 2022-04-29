@@ -14,7 +14,7 @@ func TestARCCache(t *testing.T) {
 		fc  = NewFakeClock()
 		cc  = &arcCache{}
 	)
-	cc.init(fc)
+	cc.init(fc, 5)
 
 	val, err := cc.get(ctx, "key")
 	assert.NotNil(t, err)

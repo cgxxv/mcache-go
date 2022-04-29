@@ -45,7 +45,7 @@ func deref(val interface{}) interface{} {
 	}
 }
 
-func randString(l int) string {
+func RandString(l int) string {
 	buf := make([]byte, l)
 	for i := 0; i < (l+1)/2; i++ {
 		buf[i] = byte(rand.Intn(256))

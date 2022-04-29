@@ -45,8 +45,8 @@ const (
 	typeLfu    = "lfu"
 	typeArc    = "arc"
 
-	defaultCacheSize  = 2560                    //默认缓存容量
-	defaultShardCap   = 256                     //默认单片容量
-	defaultShardCount = 32                      //默认分片数量
+	defaultCacheSize  = 1 << 7                  //默认缓存容量
+	defaultShardCap   = 1 << 6                  //默认单片容量
+	defaultShardCount = 1 << 5                  //默认分片数量
 	defaultExpireAt   = 100 * 365 * 24 * 3600e9 //100years
 )

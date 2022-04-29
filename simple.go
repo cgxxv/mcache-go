@@ -15,11 +15,11 @@ type simpleCache struct {
 	sync.Mutex
 }
 
-func (c *simpleCache) init(clock Clock) {
+func (c *simpleCache) init(clock Clock, capacity int) {
 	c.clock = clock
 	c.items = make(map[string]simpleItem, defaultShardCap)
 	c.pq = make(simplepq, 0, defaultShardCap)
-	c.cap = defaultShardCap
+	c.cap = capacity
 }
 
 func (c *simpleCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {

@@ -13,6 +13,7 @@ type baseCache struct {
 	clock       Clock
 	size        int
 	shardCount  int
+	shardCap    int
 	defaultVal  interface{}
 	expiration  time.Duration
 	loaderFunc  LoaderFunc
@@ -129,6 +130,10 @@ func New(size int, opts ...Option) Cache {
 	cb.shardCount = int(math.Ceil(float64(cb.size) / float64(defaultShardCap)))
 	if cb.shardCount == 0 {
 		cb.shardCount = defaultShardCount
+	}
+	cb.shardCap = cb.size / cb.shardCount
+	if cb.shardCap == 0 {
+		cb.shardCap = defaultShardCap
 	}
 	cb.formatByOpts(o)
 

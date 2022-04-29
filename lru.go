@@ -15,11 +15,11 @@ type lruCache struct {
 	sync.Mutex
 }
 
-func (c *lruCache) init(clock Clock) {
+func (c *lruCache) init(clock Clock, capacity int) {
 	c.clock = clock
-	c.items = make(map[string]*list.Element, defaultShardCap+1)
+	c.items = make(map[string]*list.Element, capacity+1)
 	c.evictList = list.New()
-	c.cap = defaultShardCap
+	c.cap = capacity
 }
 
 func (c *lruCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
