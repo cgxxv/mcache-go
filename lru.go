@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type lruCache struct {
+type LruCache struct {
 	clock     Clock
 	items     map[string]*list.Element
 	evictList *list.List
@@ -15,14 +15,14 @@ type lruCache struct {
 	sync.Mutex
 }
 
-func (c *lruCache) init(clock Clock, capacity int) {
+func (c *LruCache) init(clock Clock, capacity int) {
 	c.clock = clock
 	c.items = make(map[string]*list.Element, capacity+1)
 	c.evictList = list.New()
 	c.cap = capacity
 }
 
-func (c *lruCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+func (c *LruCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
 	value := deref(val)
 	it, ok := c.items[key]
 	if ok {
@@ -51,7 +51,7 @@ func (c *lruCache) set(ctx context.Context, key string, val interface{}, ttl tim
 	return nil
 }
 
-func (c *lruCache) get(ctx context.Context, key string) (interface{}, error) {
+func (c *LruCache) get(ctx context.Context, key string) (interface{}, error) {
 	item, ok := c.items[key]
 	if ok {
 		it := item.Value.(*lruItem)
@@ -64,7 +64,7 @@ func (c *lruCache) get(ctx context.Context, key string) (interface{}, error) {
 	return nil, KeyNotFoundError
 }
 
-func (c *lruCache) evict(ctx context.Context, count int) {
+func (c *LruCache) evict(ctx context.Context, count int) {
 	if c.evictList.Len() < c.cap {
 		return
 	}
@@ -79,7 +79,7 @@ func (c *lruCache) evict(ctx context.Context, count int) {
 	}
 }
 
-func (c *lruCache) has(ctx context.Context, key string) bool {
+func (c *LruCache) has(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if !ok {
 		return false
@@ -92,7 +92,7 @@ func (c *lruCache) has(ctx context.Context, key string) bool {
 	return true
 }
 
-func (c *lruCache) remove(ctx context.Context, key string) bool {
+func (c *LruCache) remove(ctx context.Context, key string) bool {
 	if ent, ok := c.items[key]; ok {
 		c.removeElement(ent)
 		return true
@@ -100,7 +100,7 @@ func (c *lruCache) remove(ctx context.Context, key string) bool {
 	return false
 }
 
-func (c *lruCache) removeElement(e *list.Element) {
+func (c *LruCache) removeElement(e *list.Element) {
 	c.evictList.Remove(e)
 	entry := e.Value.(*lruItem)
 	delete(c.items, entry.key)

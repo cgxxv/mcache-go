@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type arcCache struct {
+type ArcCache struct {
 	clock Clock
 	items map[string]arcItem
 	cap   int
@@ -20,19 +20,19 @@ type arcCache struct {
 	b2   *arcList
 }
 
-func (c *arcCache) init(clock Clock, capacity int) {
+func (c *ArcCache) init(clock Clock, capacity int) {
 	c.clock = clock
 	c.items = make(map[string]arcItem, capacity)
 	c.cap = capacity
 
 	l := capacity / 2
-	c.t1 = newarcCacheList(l)
-	c.t2 = newarcCacheList(c.cap - l)
-	c.b1 = newarcCacheList(c.cap - l)
-	c.b2 = newarcCacheList(l)
+	c.t1 = newArcCacheList(l)
+	c.t2 = newArcCacheList(c.cap - l)
+	c.b1 = newArcCacheList(c.cap - l)
+	c.b2 = newArcCacheList(l)
 }
 
-func (c *arcCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+func (c *ArcCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
 	value := deref(val)
 	item, ok := c.items[key]
 	if ttl > 0 {
@@ -64,7 +64,7 @@ func (c *arcCache) set(ctx context.Context, key string, val interface{}, ttl tim
 	return nil
 }
 
-func (c *arcCache) get(ctx context.Context, key string) (interface{}, error) {
+func (c *ArcCache) get(ctx context.Context, key string) (interface{}, error) {
 	item, ok := c.items[key]
 	if !ok {
 		return nil, KeyNotFoundError
@@ -79,7 +79,7 @@ func (c *arcCache) get(ctx context.Context, key string) (interface{}, error) {
 	return item.value, nil
 }
 
-func (c *arcCache) has(ctx context.Context, key string) bool {
+func (c *ArcCache) has(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if !ok {
 		return false
@@ -93,7 +93,7 @@ func (c *arcCache) has(ctx context.Context, key string) bool {
 	return true
 }
 
-func (c *arcCache) remove(ctx context.Context, key string) bool {
+func (c *ArcCache) remove(ctx context.Context, key string) bool {
 	delete(c.items, key)
 	if elt := c.b1.Lookup(key); elt != nil {
 		c.b1.Remove(key, elt)
@@ -115,7 +115,7 @@ func (c *arcCache) remove(ctx context.Context, key string) bool {
 	return false
 }
 
-func (c *arcCache) evict(ctx context.Context, count int) {
+func (c *ArcCache) evict(ctx context.Context, count int) {
 	if !c.isCacheFull() {
 		return
 	}
@@ -157,7 +157,7 @@ func (c *arcCache) evict(ctx context.Context, count int) {
 	}
 }
 
-func (c *arcCache) update(ctx context.Context, key string) {
+func (c *ArcCache) update(ctx context.Context, key string) {
 	if e := c.b1.Lookup(key); e != nil {
 		c.b1.Remove(key, e)
 		c.t1.PushFront(key)
@@ -184,7 +184,7 @@ func (c *arcCache) update(ctx context.Context, key string) {
 	}
 }
 
-func (c *arcCache) isCacheFull() bool {
+func (c *ArcCache) isCacheFull() bool {
 	return (c.t1.Len() + c.t2.Len()) == c.cap
 }
 
@@ -203,7 +203,7 @@ type arcList struct {
 	keys map[string]*list.Element
 }
 
-func newarcCacheList(cap int) *arcList {
+func newArcCacheList(cap int) *arcList {
 	return &arcList{
 		l:    list.New(),
 		keys: make(map[string]*list.Element, cap),

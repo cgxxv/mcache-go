@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type simpleCache struct {
+type SimpleCache struct {
 	clock Clock
 	items map[string]simpleItem
 	pq    simplepq
@@ -15,14 +15,14 @@ type simpleCache struct {
 	sync.Mutex
 }
 
-func (c *simpleCache) init(clock Clock, capacity int) {
+func (c *SimpleCache) init(clock Clock, capacity int) {
 	c.clock = clock
 	c.items = make(map[string]simpleItem, defaultShardCap)
 	c.pq = make(simplepq, 0, defaultShardCap)
 	c.cap = capacity
 }
 
-func (c *simpleCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+func (c *SimpleCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
 	value := deref(val)
 	var entry = simpleEntry{
 		key: key,
@@ -53,7 +53,7 @@ func (c *simpleCache) set(ctx context.Context, key string, val interface{}, ttl 
 	return nil
 }
 
-func (c *simpleCache) evict(ctx context.Context, count int) {
+func (c *SimpleCache) evict(ctx context.Context, count int) {
 	if len(c.items) < c.cap {
 		return
 	}
@@ -80,7 +80,7 @@ func (c *simpleCache) evict(ctx context.Context, count int) {
 	}
 }
 
-func (c *simpleCache) get(ctx context.Context, key string) (interface{}, error) {
+func (c *SimpleCache) get(ctx context.Context, key string) (interface{}, error) {
 	item, ok := c.items[key]
 	if ok {
 		if !item.IsExpired(c.clock) {
@@ -93,7 +93,7 @@ func (c *simpleCache) get(ctx context.Context, key string) (interface{}, error) 
 	return nil, KeyNotFoundError
 }
 
-func (c *simpleCache) has(ctx context.Context, key string) bool {
+func (c *SimpleCache) has(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if !ok {
 		return false
@@ -106,7 +106,7 @@ func (c *simpleCache) has(ctx context.Context, key string) bool {
 	return true
 }
 
-func (c *simpleCache) remove(ctx context.Context, key string) bool {
+func (c *SimpleCache) remove(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if ok {
 		delete(c.items, key)

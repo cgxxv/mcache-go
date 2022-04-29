@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type baseCache struct {
+type cache struct {
 	typ         string
 	name        string
 	clock       Clock
@@ -24,7 +24,7 @@ type baseCache struct {
 	deserializeFunc deserializeFunc
 }
 
-func (c *baseCache) getOption(opts ...Option) *options {
+func (c *cache) getOption(opts ...Option) *options {
 	o := &options{
 		IsWait:          true,
 		TTL:             c.expiration,
@@ -102,11 +102,11 @@ func (c *baseCache) getOption(opts ...Option) *options {
 	return o
 }
 
-type CacheBuilder struct {
-	baseCache
+type builder[T any, P CachePolicy[T]] struct {
+	cache
 }
 
-func New(size int, opts ...Option) Cache {
+func New[T any, P CachePolicy[T]](size int, opts ...Option) Cache {
 	o := options{
 		Typ:      typeSimple,
 		RedisCli: RedisCli{},
@@ -118,8 +118,8 @@ func New(size int, opts ...Option) Cache {
 		panic("mcache: build option check fail")
 	}
 
-	cb := &CacheBuilder{
-		baseCache{
+	cb := &builder[T, P]{
+		cache{
 			size:  size,
 			clock: NewRealClock(),
 		},
@@ -140,19 +140,7 @@ func New(size int, opts ...Option) Cache {
 	return cb.build()
 }
 
-func NewArc(size int) Cache {
-	return New(size, WithCacheType(typeArc))
-}
-
-func NewLRU(size int) Cache {
-	return New(size, WithCacheType(typeLru))
-}
-
-func NewLFU(size int) Cache {
-	return New(size, WithCacheType(typeLfu))
-}
-
-func (cb *CacheBuilder) formatByOpts(o options) {
+func (cb *builder[T, P]) formatByOpts(o options) {
 	cb.typ = o.Typ
 	cb.name = o.Name
 	if o.LoaderFunc != nil {
@@ -176,15 +164,15 @@ func (cb *CacheBuilder) formatByOpts(o options) {
 	}
 }
 
-func (cb *CacheBuilder) Clock(clock Clock) *CacheBuilder {
+func (cb *builder[T, P]) Clock(clock Clock) *builder[T, P] {
 	cb.clock = clock
 	return cb
 }
 
-func (cb *CacheBuilder) build() Cache {
+func (cb *builder[T, P]) build() Cache {
 	if cb.name == "" {
 		cb.name = cb.typ
 	}
 
-	return newShard(cb)
+	return newCacheHandler(cb)
 }

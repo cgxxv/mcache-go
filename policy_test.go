@@ -8,11 +8,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestARCCache(t *testing.T) {
+func TestCache(t *testing.T) {
+	t.Run("simple cache", runCachePolicy[SimpleCache])
+	t.Run("lfu cache", runCachePolicy[LfuCache])
+	t.Run("lru cache", runCachePolicy[LruCache])
+	t.Run("arc cache", runCachePolicy[ArcCache])
+}
+
+func runCachePolicy[T any, P CachePolicy[T]](t *testing.T) {
 	var (
 		ctx = context.TODO()
 		fc  = NewFakeClock()
-		cc  = &arcCache{}
+		cc  = P(new(T))
 	)
 	cc.init(fc, 5)
 
@@ -38,7 +45,7 @@ func TestARCCache(t *testing.T) {
 	assert.True(t, cc.remove(ctx, "key"))
 	assert.False(t, cc.remove(ctx, "k"))
 
-	cc.cap = 1
+	cc.init(fc, 1)
 	assert.Nil(t, cc.set(ctx, "ak", "av", 0))
 	cc.evict(ctx, 1)
 	assert.False(t, cc.has(ctx, "ak"))

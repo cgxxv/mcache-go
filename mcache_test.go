@@ -36,9 +36,16 @@ func init() {
 }
 
 func TestMcacheNoRemote(t *testing.T) {
+	t.Run("simple cache", runMcacheNoRemote[mcache.SimpleCache])
+	t.Run("lfu cache", runMcacheNoRemote[mcache.LfuCache])
+	t.Run("lru cache", runMcacheNoRemote[mcache.LruCache])
+	t.Run("arc cache", runMcacheNoRemote[mcache.ArcCache])
+}
+
+func runMcacheNoRemote[T any, P mcache.CachePolicy[T]](t *testing.T) {
 	var (
 		ctx = context.TODO()
-		cc  = mcache.New(runTimes)
+		cc  = mcache.New[T, P](runTimes)
 	)
 
 	for i := 0; i < runTimes; i++ {
@@ -55,9 +62,16 @@ func TestMcacheNoRemote(t *testing.T) {
 }
 
 func TestMcacheRemote(t *testing.T) {
+	t.Run("simple cache", runMcacheRemote[mcache.SimpleCache])
+	t.Run("lfu cache", runMcacheRemote[mcache.LfuCache])
+	t.Run("lru cache", runMcacheRemote[mcache.LruCache])
+	t.Run("arc cache", runMcacheNoRemote[mcache.ArcCache])
+}
+
+func runMcacheRemote[T any, P mcache.CachePolicy[T]](t *testing.T) {
 	var (
 		ctx = context.TODO()
-		cc  = mcache.New(runTimes, mcache.WithRedisClient(redisClient))
+		cc  = mcache.New[T, P](runTimes, mcache.WithRedisClient(redisClient))
 		val interface{}
 		err error
 	)

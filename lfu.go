@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type lfuCache struct {
+type LfuCache struct {
 	clock    Clock
 	items    map[string]lfuItem
 	freqList *list.List
@@ -20,7 +20,7 @@ type freqEntry struct {
 	items map[string]*lfuItem
 }
 
-func (c *lfuCache) init(clock Clock, capacity int) {
+func (c *LfuCache) init(clock Clock, capacity int) {
 	c.clock = clock
 	c.items = make(map[string]lfuItem, capacity)
 	c.freqList = list.New()
@@ -31,7 +31,7 @@ func (c *lfuCache) init(clock Clock, capacity int) {
 	})
 }
 
-func (c *lfuCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+func (c *LfuCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
 	value := deref(val)
 	item, ok := c.items[key]
 	if ttl > 0 {
@@ -59,7 +59,7 @@ func (c *lfuCache) set(ctx context.Context, key string, val interface{}, ttl tim
 	return nil
 }
 
-func (c *lfuCache) get(ctx context.Context, key string) (interface{}, error) {
+func (c *LfuCache) get(ctx context.Context, key string) (interface{}, error) {
 	item, ok := c.items[key]
 	if ok {
 		if !item.IsExpired(c.clock) {
@@ -72,7 +72,7 @@ func (c *lfuCache) get(ctx context.Context, key string) (interface{}, error) {
 	return nil, KeyNotFoundError
 }
 
-func (c *lfuCache) evict(ctx context.Context, count int) {
+func (c *LfuCache) evict(ctx context.Context, count int) {
 	if len(c.items) < c.cap {
 		return
 	}
@@ -94,7 +94,7 @@ func (c *lfuCache) evict(ctx context.Context, count int) {
 	}
 }
 
-func (c *lfuCache) has(ctx context.Context, key string) bool {
+func (c *LfuCache) has(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if !ok {
 		return false
@@ -108,7 +108,7 @@ func (c *lfuCache) has(ctx context.Context, key string) bool {
 	return true
 }
 
-func (c *lfuCache) remove(ctx context.Context, key string) bool {
+func (c *LfuCache) remove(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if ok {
 		c.removeItem(&item)
@@ -117,7 +117,7 @@ func (c *lfuCache) remove(ctx context.Context, key string) bool {
 	return false
 }
 
-func (c *lfuCache) removeItem(item *lfuItem) {
+func (c *LfuCache) removeItem(item *lfuItem) {
 	entry := item.freqElement.Value.(*freqEntry)
 	delete(c.items, item.key)
 	entry.items[item.key] = nil
@@ -128,7 +128,7 @@ func (c *lfuCache) removeItem(item *lfuItem) {
 	item = nil
 }
 
-func (c *lfuCache) increment(item *lfuItem) {
+func (c *LfuCache) increment(item *lfuItem) {
 	currentFreqElement := item.freqElement
 	currentFreqEntry := currentFreqElement.Value.(*freqEntry)
 	nextFreq := currentFreqEntry.freq + 1
