@@ -9,15 +9,15 @@ import (
 
 type simpleCache struct {
 	clock Clock
-	items map[string]*simpleItem
+	items map[string]simpleItem
 	pq    simplepq
 	cap   int
-	sync.RWMutex
+	sync.Mutex
 }
 
 func (c *simpleCache) init(clock Clock) {
 	c.clock = clock
-	c.items = make(map[string]*simpleItem, defaultShardCap)
+	c.items = make(map[string]simpleItem, defaultShardCap)
 	c.pq = make(simplepq, 0, defaultShardCap)
 	c.cap = defaultShardCap
 }
@@ -35,15 +35,13 @@ func (c *simpleCache) set(ctx context.Context, key string, val interface{}, ttl 
 	} else {
 		c.evict(ctx, 1)
 		exp := c.clock.Now().Add(defaultExpireAt)
-		item = &simpleItem{
-			clock:    c.clock,
-			value:    value,
-			expireAt: exp,
-			index:    c.pq.Len(),
-		}
+		item.clock = c.clock
+		item.value = value
+		item.expireAt = exp
+		item.index = c.pq.Len()
 		c.items[key] = item
 
-		entry.value = item
+		entry.item = &item
 		entry.priority = exp.UnixNano()
 		heap.Push(&c.pq, entry)
 	}
@@ -52,7 +50,7 @@ func (c *simpleCache) set(ctx context.Context, key string, val interface{}, ttl 
 		t := c.clock.Now().Add(ttl)
 		item.expireAt = t
 		entry.priority = t.UnixNano()
-		c.pq.update(entry)
+		c.pq.update(entry.index)
 	}
 
 	return nil
@@ -66,7 +64,7 @@ func (c *simpleCache) evict(ctx context.Context, count int) {
 	now := c.clock.Now()
 	if n := c.pq.Len(); n > 0 {
 		entry := c.pq[0]
-		if now.After(entry.value.expireAt) {
+		if now.After(entry.item.expireAt) {
 			delete(c.items, entry.key)
 			heap.Pop(&c.pq)
 			return
@@ -123,7 +121,7 @@ func (si simpleItem) IsExpired() bool {
 
 type simpleEntry struct {
 	key      string
-	value    *simpleItem
+	item     *simpleItem
 	priority int64
 	index    int
 }
@@ -139,9 +137,9 @@ func (pq simplepq) Less(i, j int) bool {
 func (pq simplepq) Swap(i, j int) {
 	pq[i], pq[j] = pq[j], pq[i]
 	pq[i].index = i
-	pq[i].value.index = i
+	pq[i].item.index = i
 	pq[j].index = j
-	pq[j].value.index = j
+	pq[j].item.index = j
 }
 
 func (pq *simplepq) Push(x interface{}) {
@@ -161,6 +159,6 @@ func (pq *simplepq) Pop() interface{} {
 	return entry
 }
 
-func (pq *simplepq) update(entry *simpleEntry) {
-	heap.Fix(pq, entry.index)
+func (pq *simplepq) update(index int) {
+	heap.Fix(pq, index)
 }

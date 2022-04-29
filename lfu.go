@@ -9,25 +9,25 @@ import (
 
 type lfuCache struct {
 	clock    Clock
-	items    map[string]*lfuItem
+	items    map[string]lfuItem
 	freqList *list.List
 	cap      int
-	sync.RWMutex
+	sync.Mutex
 }
 
 type freqEntry struct {
 	freq  uint
-	items map[*lfuItem]struct{}
+	items map[string]*lfuItem
 }
 
 func (c *lfuCache) init(clock Clock) {
 	c.clock = clock
-	c.items = make(map[string]*lfuItem, defaultShardCap)
+	c.items = make(map[string]lfuItem, defaultShardCap)
 	c.freqList = list.New()
 	c.cap = defaultShardCap
 	c.freqList.PushFront(&freqEntry{
 		freq:  0,
-		items: make(map[*lfuItem]struct{}, 8),
+		items: make(map[string]*lfuItem, 8),
 	})
 }
 
@@ -38,15 +38,14 @@ func (c *lfuCache) set(ctx context.Context, key string, val interface{}, ttl tim
 		item.value = value
 	} else {
 		c.evict(ctx, 1)
-		item = &lfuItem{
-			clock:       c.clock,
-			key:         key,
-			value:       value,
-			freqElement: nil,
-		}
+		item.clock = c.clock
+		item.key = key
+		item.value = value
+		item.freqElement = nil
+
 		el := c.freqList.Front()
 		fe := el.Value.(*freqEntry)
-		fe.items[item] = struct{}{}
+		fe.items[key] = &item
 
 		item.freqElement = el
 		c.items[key] = item
@@ -63,10 +62,10 @@ func (c *lfuCache) get(ctx context.Context, key string) (interface{}, error) {
 	item, ok := c.items[key]
 	if ok {
 		if !item.IsExpired() {
-			c.increment(item)
+			c.increment(&item)
 			return item.value, nil
 		}
-		c.removeItem(item)
+		c.removeItem(&item)
 	}
 	return nil, KeyNotFoundError
 }
@@ -81,7 +80,7 @@ func (c *lfuCache) evict(ctx context.Context, count int) {
 		if entry == nil {
 			return
 		} else {
-			for item := range entry.Value.(*freqEntry).items {
+			for _, item := range entry.Value.(*freqEntry).items {
 				if i >= count {
 					return
 				}
@@ -103,7 +102,7 @@ func (c *lfuCache) has(ctx context.Context, key string) bool {
 
 func (c *lfuCache) remove(ctx context.Context, key string) bool {
 	if item, ok := c.items[key]; ok {
-		c.removeItem(item)
+		c.removeItem(&item)
 		return true
 	}
 	return false
@@ -112,7 +111,8 @@ func (c *lfuCache) remove(ctx context.Context, key string) bool {
 func (c *lfuCache) removeItem(item *lfuItem) {
 	entry := item.freqElement.Value.(*freqEntry)
 	delete(c.items, item.key)
-	delete(entry.items, item)
+	entry.items[item.key] = nil
+	delete(entry.items, item.key)
 	if isRemovableFreqEntry(entry) {
 		c.freqList.Remove(item.freqElement)
 	}
@@ -123,7 +123,7 @@ func (c *lfuCache) increment(item *lfuItem) {
 	currentFreqElement := item.freqElement
 	currentFreqEntry := currentFreqElement.Value.(*freqEntry)
 	nextFreq := currentFreqEntry.freq + 1
-	delete(currentFreqEntry.items, item)
+	delete(currentFreqEntry.items, item.key)
 
 	removable := isRemovableFreqEntry(currentFreqEntry)
 
@@ -136,7 +136,7 @@ func (c *lfuCache) increment(item *lfuItem) {
 		} else {
 			nextFreqElement = c.freqList.InsertAfter(&freqEntry{
 				freq:  nextFreq,
-				items: make(map[*lfuItem]struct{}),
+				items: make(map[string]*lfuItem),
 			}, currentFreqElement)
 		}
 	case nextFreqElement.Value.(*freqEntry).freq == nextFreq:
@@ -146,7 +146,7 @@ func (c *lfuCache) increment(item *lfuItem) {
 	default:
 		panic("unreachable")
 	}
-	nextFreqElement.Value.(*freqEntry).items[item] = struct{}{}
+	nextFreqElement.Value.(*freqEntry).items[item.key] = item
 	item.freqElement = nextFreqElement
 }
 

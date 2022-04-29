@@ -12,7 +12,7 @@ type lruCache struct {
 	items     map[string]*list.Element
 	evictList *list.List
 	cap       int
-	sync.RWMutex
+	sync.Mutex
 }
 
 func (c *lruCache) init(clock Clock) {
@@ -24,19 +24,16 @@ func (c *lruCache) init(clock Clock) {
 
 func (c *lruCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
 	value := vderef(val)
-	var item *lruItem
+	var item lruItem
 	if it, ok := c.items[key]; ok {
+		it.Value.(*lruItem).value = value
 		c.evictList.MoveToFront(it)
-		item = it.Value.(*lruItem)
-		item.value = value
 	} else {
 		c.evict(ctx, 1)
-		item = &lruItem{
-			clock: c.clock,
-			key:   key,
-			value: value,
-		}
-		c.items[key] = c.evictList.PushFront(item)
+		item.clock = c.clock
+		item.key = key
+		item.value = value
+		c.items[key] = c.evictList.PushFront(&item)
 	}
 
 	if ttl > 0 {

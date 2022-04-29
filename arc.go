@@ -5,14 +5,13 @@ import (
 	"context"
 	"sync"
 	"time"
-	"unsafe"
 )
 
 type arcCache struct {
 	clock Clock
-	items map[string]*arcItem
+	items map[string]arcItem
 	cap   int
-	sync.RWMutex
+	sync.Mutex
 
 	part int
 	t1   *arcList
@@ -23,7 +22,7 @@ type arcCache struct {
 
 func (c *arcCache) init(clock Clock) {
 	c.clock = clock
-	c.items = make(map[string]*arcItem, defaultShardCap)
+	c.items = make(map[string]arcItem, defaultShardCap)
 	c.cap = defaultShardCap
 
 	l := defaultShardCap / 4
@@ -39,11 +38,9 @@ func (c *arcCache) set(ctx context.Context, key string, val interface{}, ttl tim
 	if ok {
 		item.value = value
 	} else {
-		item = &arcItem{
-			clock: c.clock,
-			key:   key,
-			value: value,
-		}
+		item.clock = c.clock
+		item.key = key
+		item.value = value
 		c.items[key] = item
 	}
 	if ttl > 0 {
@@ -103,7 +100,7 @@ func (c *arcCache) get(ctx context.Context, key string) (interface{}, error) {
 		item := c.items[key]
 		if !item.IsExpired() {
 			c.t2.PushFront(key)
-			return unsafe.Pointer(item), nil
+			return item.value, nil
 		} else {
 			delete(c.items, key)
 			c.b1.PushFront(key)
@@ -113,7 +110,7 @@ func (c *arcCache) get(ctx context.Context, key string) (interface{}, error) {
 		item := c.items[key]
 		if !item.IsExpired() {
 			c.t2.MoveToFront(elt)
-			return unsafe.Pointer(item), nil
+			return item.value, nil
 		} else {
 			delete(c.items, key)
 			c.t2.Remove(key, elt)
@@ -199,13 +196,13 @@ func (it *arcItem) IsExpired() bool {
 
 type arcList struct {
 	l    *list.List
-	keys map[interface{}]*list.Element
+	keys map[string]*list.Element
 }
 
 func newarcCacheList(cap int) *arcList {
 	return &arcList{
 		l:    list.New(),
-		keys: make(map[interface{}]*list.Element, cap),
+		keys: make(map[string]*list.Element, cap),
 	}
 }
 
