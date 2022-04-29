@@ -25,100 +25,58 @@ func (c *arcCache) init(clock Clock) {
 	c.items = make(map[string]arcItem, defaultShardCap)
 	c.cap = defaultShardCap
 
-	l := defaultShardCap / 4
+	l := defaultShardCap / 2
 	c.t1 = newarcCacheList(l)
-	c.t2 = newarcCacheList(l)
-	c.b1 = newarcCacheList(l)
+	c.t2 = newarcCacheList(c.cap - l)
+	c.b1 = newarcCacheList(c.cap - l)
 	c.b2 = newarcCacheList(l)
 }
 
 func (c *arcCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
-	value := vderef(val)
+	value := deref(val)
 	item, ok := c.items[key]
+	if ttl > 0 {
+		item.expireAt = c.clock.Now().Add(ttl)
+	} else {
+		item.expireAt = c.clock.Now().Add(defaultExpireAt)
+	}
+
 	if ok {
 		item.value = value
 	} else {
-		item.clock = c.clock
 		item.key = key
 		item.value = value
 		c.items[key] = item
 	}
-	if ttl > 0 {
-		item.expireAt = c.clock.Now().Add(ttl)
-	}
 
 	defer func() {
+		c.evict(ctx, 1)
 		if c.t1.Has(key) || c.t2.Has(key) {
 			return
 		}
 
-		if elt := c.b1.Lookup(key); elt != nil {
-			c.setPart(minInt(c.cap, c.part+maxInt(c.b2.Len()/c.b1.Len(), 1)))
-			c.replace(key)
-			c.b1.Remove(key, elt)
-			c.t2.PushFront(key)
-			return
-		}
-
-		if elt := c.b2.Lookup(key); elt != nil {
-			c.setPart(maxInt(0, c.part-maxInt(c.b1.Len()/c.b2.Len(), 1)))
-			c.replace(key)
-			c.b2.Remove(key, elt)
-			c.t2.PushFront(key)
-			return
-		}
-
-		if c.isCacheFull() && c.t1.Len()+c.b1.Len() == c.cap {
-			if c.t1.Len() < c.cap {
-				c.b1.RemoveTail()
-				c.replace(key)
-			} else {
-				pop := c.t1.RemoveTail()
-				delete(c.items, pop)
-			}
+		if ok {
+			c.update(ctx, key)
 		} else {
-			total := c.t1.Len() + c.b1.Len() + c.t2.Len() + c.b2.Len()
-			if total >= c.cap {
-				if total == (2 * c.cap) {
-					if c.b2.Len() > 0 {
-						c.b2.RemoveTail()
-					} else {
-						c.b1.RemoveTail()
-					}
-				}
-				c.replace(key)
-			}
+			c.t1.PushFront(key)
 		}
-		c.t1.PushFront(key)
 	}()
 	return nil
 }
 
 func (c *arcCache) get(ctx context.Context, key string) (interface{}, error) {
-	if elt := c.t1.Lookup(key); elt != nil {
-		c.t1.Remove(key, elt)
-		item := c.items[key]
-		if !item.IsExpired() {
-			c.t2.PushFront(key)
-			return item.value, nil
-		} else {
-			delete(c.items, key)
-			c.b1.PushFront(key)
-		}
-	}
-	if elt := c.t2.Lookup(key); elt != nil {
-		item := c.items[key]
-		if !item.IsExpired() {
-			c.t2.MoveToFront(elt)
-			return item.value, nil
-		} else {
-			delete(c.items, key)
-			c.t2.Remove(key, elt)
-			c.b2.PushFront(key)
-		}
+	item, ok := c.items[key]
+	if !ok {
+		return nil, KeyNotFoundError
 	}
 
-	return nil, KeyNotFoundError
+	c.update(ctx, key)
+	if item.IsExpired(c.clock) {
+		c.remove(ctx, key)
+		return nil, KeyExpiredError
+	}
+
+	return item.value, nil
 }
 
 func (c *arcCache) has(ctx context.Context, key string) bool {
@@ -126,21 +84,31 @@ func (c *arcCache) has(ctx context.Context, key string) bool {
 	if !ok {
 		return false
 	}
-	return !item.IsExpired()
+
+	c.update(ctx, key)
+	if item.IsExpired(c.clock) {
+		c.remove(ctx, key)
+		return false
+	}
+	return true
 }
 
 func (c *arcCache) remove(ctx context.Context, key string) bool {
-	if elt := c.t1.Lookup(key); elt != nil {
-		c.t1.Remove(key, elt)
-		delete(c.items, key)
-		c.b1.PushFront(key)
+	delete(c.items, key)
+	if elt := c.b1.Lookup(key); elt != nil {
+		c.b1.Remove(key, elt)
 		return true
 	}
-
+	if elt := c.t1.Lookup(key); elt != nil {
+		c.t1.Remove(key, elt)
+		return true
+	}
+	if elt := c.b2.Lookup(key); elt != nil {
+		c.b2.Remove(key, elt)
+		return true
+	}
 	if elt := c.t2.Lookup(key); elt != nil {
 		c.t2.Remove(key, elt)
-		delete(c.items, key)
-		c.b2.PushFront(key)
 		return true
 	}
 
@@ -148,33 +116,71 @@ func (c *arcCache) remove(ctx context.Context, key string) bool {
 }
 
 func (c *arcCache) evict(ctx context.Context, count int) {
-	if c.isCacheFull() && c.t1.Len()+c.b1.Len() == c.cap {
-		pop := c.t1.RemoveTail()
-		delete(c.items, pop)
-	}
-}
-
-func (c *arcCache) replace(key string) {
 	if !c.isCacheFull() {
 		return
 	}
-	var old string
-	if c.t1.Len() > 0 && ((c.b2.Has(key) && c.t1.Len() == c.part) || (c.t1.Len() > c.part)) {
-		old = c.t1.RemoveTail()
-		c.b1.PushFront(old)
-	} else if c.t2.Len() > 0 {
-		old = c.t2.RemoveTail()
-		c.b2.PushFront(old)
-	} else {
-		old = c.t1.RemoveTail()
-		c.b1.PushFront(old)
+
+	cnt := 0
+	for {
+		if cnt >= count {
+			break
+		}
+
+		if c.isCacheFull() && c.t1.Len()+c.b1.Len() == c.cap {
+			if c.t1.Len() < c.cap {
+				if c.b1.Len() > 0 {
+					pop := c.b1.RemoveTail()
+					delete(c.items, pop)
+					cnt++
+				}
+			} else {
+				pop := c.t1.RemoveTail()
+				delete(c.items, pop)
+				cnt++
+			}
+		} else {
+			total := c.t1.Len() + c.b1.Len() + c.t2.Len() + c.b2.Len()
+			if total == c.cap<<1 {
+				if c.b2.Len() > 0 {
+					pop := c.b2.RemoveTail()
+					delete(c.items, pop)
+					cnt++
+					continue
+				}
+				if c.b1.Len() > 0 {
+					pop := c.b1.RemoveTail()
+					delete(c.items, pop)
+					cnt++
+				}
+			}
+		}
 	}
-	delete(c.items, old)
 }
 
-func (c *arcCache) setPart(p int) {
-	if c.isCacheFull() {
-		c.part = p
+func (c *arcCache) update(ctx context.Context, key string) {
+	if e := c.b1.Lookup(key); e != nil {
+		c.b1.Remove(key, e)
+		c.t1.PushFront(key)
+		return
+	}
+
+	if e := c.t1.Lookup(key); e != nil {
+		c.t1.Remove(key, e)
+		c.t2.PushFront(key)
+		return
+	}
+
+	if e := c.t2.Lookup(key); e != nil {
+		c.t2.MoveToFront(e)
+		return
+	}
+
+	if e := c.b2.Lookup(key); e != nil {
+		c.b2.Remove(key, e)
+		c.t1.PushFront(key)
+		if pop := c.t1.RemoveTail(); pop != "" {
+			c.b1.PushFront(pop)
+		}
 	}
 }
 
@@ -183,15 +189,13 @@ func (c *arcCache) isCacheFull() bool {
 }
 
 type arcItem struct {
-	clock    Clock
 	key      string
 	value    interface{}
 	expireAt time.Time
 }
 
-func (it *arcItem) IsExpired() bool {
-
-	return it.expireAt.Before(it.clock.Now())
+func (it *arcItem) IsExpired(clock Clock) bool {
+	return it.expireAt.Before(clock.Now())
 }
 
 type arcList struct {
@@ -237,10 +241,8 @@ func (al *arcList) Remove(key string, elt *list.Element) {
 func (al *arcList) RemoveTail() string {
 	elt := al.l.Back()
 	al.l.Remove(elt)
-
 	key := elt.Value.(string)
 	delete(al.keys, key)
-
 	return key
 }
 

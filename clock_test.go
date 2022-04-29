@@ -6,19 +6,21 @@ import (
 	"testing"
 	"time"
 	"unsafe"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestRealClock_Now(t *testing.T) {
+func TestRealClock(t *testing.T) {
 	var (
 		p  = time.Now()
-		rc = &RealClock{
+		rc = &realClock{
 			p: unsafe.Pointer(&p),
 		}
 		ms = 100 * time.Millisecond
 		tc = make(chan time.Time)
 	)
 	go func() {
-		for i := 0; i < 100; i++ {
+		for i := 0; i < 10; i++ {
 			p := time.Now()
 			atomic.StorePointer(&rc.p, unsafe.Pointer(&p))
 			tc <- p
@@ -37,4 +39,15 @@ func TestRealClock_Now(t *testing.T) {
 			t.Errorf("RealClock.Now() = %v, want %v", got, want)
 		}
 	}
+}
+
+func TestFakeClock(t *testing.T) {
+	var (
+		fc = NewFakeClock()
+	)
+
+	now := fc.Now()
+	fc.Advance(time.Second)
+
+	assert.Equal(t, time.Duration(0), now.Add(time.Second).Sub(fc.Now()))
 }

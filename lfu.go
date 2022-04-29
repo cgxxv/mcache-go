@@ -32,13 +32,18 @@ func (c *lfuCache) init(clock Clock) {
 }
 
 func (c *lfuCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
-	value := vderef(val)
+	value := deref(val)
 	item, ok := c.items[key]
+	if ttl > 0 {
+		item.expireAt = c.clock.Now().Add(ttl)
+	} else {
+		item.expireAt = c.clock.Now().Add(defaultExpireAt)
+	}
+
 	if ok {
 		item.value = value
 	} else {
 		c.evict(ctx, 1)
-		item.clock = c.clock
 		item.key = key
 		item.value = value
 		item.freqElement = nil
@@ -51,21 +56,18 @@ func (c *lfuCache) set(ctx context.Context, key string, val interface{}, ttl tim
 		c.items[key] = item
 	}
 
-	if ttl > 0 {
-		item.expireAt = c.clock.Now().Add(ttl)
-	}
-
 	return nil
 }
 
 func (c *lfuCache) get(ctx context.Context, key string) (interface{}, error) {
 	item, ok := c.items[key]
 	if ok {
-		if !item.IsExpired() {
+		if !item.IsExpired(c.clock) {
 			c.increment(&item)
 			return item.value, nil
 		}
 		c.removeItem(&item)
+		return nil, KeyExpiredError
 	}
 	return nil, KeyNotFoundError
 }
@@ -97,11 +99,18 @@ func (c *lfuCache) has(ctx context.Context, key string) bool {
 	if !ok {
 		return false
 	}
-	return !item.IsExpired()
+
+	if item.IsExpired(c.clock) {
+		c.removeItem(&item)
+		return false
+	}
+
+	return true
 }
 
 func (c *lfuCache) remove(ctx context.Context, key string) bool {
-	if item, ok := c.items[key]; ok {
+	item, ok := c.items[key]
+	if ok {
 		c.removeItem(&item)
 		return true
 	}
@@ -155,13 +164,12 @@ func isRemovableFreqEntry(entry *freqEntry) bool {
 }
 
 type lfuItem struct {
-	clock       Clock
 	key         string
 	value       interface{}
 	freqElement *list.Element
 	expireAt    time.Time
 }
 
-func (it *lfuItem) IsExpired() bool {
-	return it.expireAt.Before(it.clock.Now())
+func (it *lfuItem) IsExpired(clock Clock) bool {
+	return it.expireAt.Before(clock.Now())
 }

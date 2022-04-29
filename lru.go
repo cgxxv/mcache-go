@@ -23,21 +23,29 @@ func (c *lruCache) init(clock Clock) {
 }
 
 func (c *lruCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
-	value := vderef(val)
-	var item lruItem
-	if it, ok := c.items[key]; ok {
-		it.Value.(*lruItem).value = value
+	value := deref(val)
+	it, ok := c.items[key]
+	if ok {
+		item := it.Value.(*lfuItem)
+		item.value = value
+		if ttl > 0 {
+			item.expireAt = c.clock.Now().Add(ttl)
+		} else {
+			item.expireAt = c.clock.Now().Add(defaultExpireAt)
+		}
 		c.evictList.MoveToFront(it)
 	} else {
 		c.evict(ctx, 1)
-		item.clock = c.clock
-		item.key = key
-		item.value = value
+		item := lruItem{
+			key:   key,
+			value: value,
+		}
+		if ttl > 0 {
+			item.expireAt = c.clock.Now().Add(ttl)
+		} else {
+			item.expireAt = c.clock.Now().Add(defaultExpireAt)
+		}
 		c.items[key] = c.evictList.PushFront(&item)
-	}
-
-	if ttl > 0 {
-		item.expireAt = c.clock.Now().Add(ttl)
 	}
 
 	return nil
@@ -47,7 +55,7 @@ func (c *lruCache) get(ctx context.Context, key string) (interface{}, error) {
 	item, ok := c.items[key]
 	if ok {
 		it := item.Value.(*lruItem)
-		if !it.IsExpired() {
+		if !it.IsExpired(c.clock) {
 			c.evictList.MoveToFront(item)
 			return it.value, nil
 		}
@@ -76,7 +84,12 @@ func (c *lruCache) has(ctx context.Context, key string) bool {
 	if !ok {
 		return false
 	}
-	return !item.Value.(*lruItem).IsExpired()
+
+	if item.Value.(*lruItem).IsExpired(c.clock) {
+		c.removeElement(item)
+		return false
+	}
+	return true
 }
 
 func (c *lruCache) remove(ctx context.Context, key string) bool {
@@ -94,12 +107,11 @@ func (c *lruCache) removeElement(e *list.Element) {
 }
 
 type lruItem struct {
-	clock    Clock
 	key      string
 	value    interface{}
 	expireAt time.Time
 }
 
-func (it *lruItem) IsExpired() bool {
-	return it.expireAt.Before(it.clock.Now())
+func (it *lruItem) IsExpired(clock Clock) bool {
+	return it.expireAt.Before(clock.Now())
 }

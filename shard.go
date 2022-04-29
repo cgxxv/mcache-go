@@ -56,10 +56,6 @@ func newShard(cb *CacheBuilder) Cache {
 }
 
 func (c *baseShard) purge() {
-	if runUnitTest {
-		return
-	}
-
 	const lockP = 50
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
@@ -275,6 +271,10 @@ func (c *baseShard) Exists(ctx context.Context, key string) bool {
 	return s.has(ctx, key)
 }
 
+func (c *baseShard) getShard(key string) Shard {
+	return c.shards[MemHashString(key)&uint64(c.shardCount)]
+}
+
 func (c *baseShard) getFromLocal2(ctx context.Context, key string, onLoad bool) (interface{}, error) {
 	atomic.AddInt32(&c.procs, 1)
 	defer atomic.AddInt32(&c.procs, -1)
@@ -308,8 +308,15 @@ func (c *baseShard) getFromLocal(ctx context.Context, key string, onLoad bool) (
 	return val, nil
 }
 
-func (c *baseShard) getShard(key string) Shard {
-	return c.shards[MemHashString(key)%uint64(c.shardCount)]
+func (c *baseShard) remove(ctx context.Context, key string) bool {
+	atomic.AddInt32(&c.procs, 1)
+	defer atomic.AddInt32(&c.procs, -1)
+
+	s := c.getShard(key)
+	s.Lock()
+	defer s.Unlock()
+
+	return s.remove(ctx, key)
 }
 
 func (c *baseShard) serialize(ctx context.Context, val interface{}, opts ...Option) ([]byte, error) {
@@ -334,15 +341,4 @@ func (c *baseShard) deserialize(ctx context.Context, data []byte, opts ...Option
 		return c.deserializeFunc(ctx, data)
 	}
 	return nil, errors.New("mcache: must set WithSafeValPtrFunc option!")
-}
-
-func (c *baseShard) remove(ctx context.Context, key string) bool {
-	atomic.AddInt32(&c.procs, 1)
-	defer atomic.AddInt32(&c.procs, -1)
-
-	s := c.getShard(key)
-	s.Lock()
-	defer s.Unlock()
-
-	return s.remove(ctx, key)
 }

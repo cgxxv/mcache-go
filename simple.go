@@ -23,34 +23,31 @@ func (c *simpleCache) init(clock Clock) {
 }
 
 func (c *simpleCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
-	value := vderef(val)
-	var entry = &simpleEntry{
+	value := deref(val)
+	var entry = simpleEntry{
 		key: key,
 	}
 
 	item, ok := c.items[key]
+	if ttl > 0 {
+		item.expireAt = c.clock.Now().Add(ttl)
+	} else {
+		item.expireAt = c.clock.Now().Add(defaultExpireAt)
+	}
+
 	if ok {
 		item.value = value
 		entry.priority = item.expireAt.UnixNano()
+		c.pq.update(entry.index)
 	} else {
 		c.evict(ctx, 1)
-		exp := c.clock.Now().Add(defaultExpireAt)
-		item.clock = c.clock
 		item.value = value
-		item.expireAt = exp
 		item.index = c.pq.Len()
 		c.items[key] = item
 
 		entry.item = &item
-		entry.priority = exp.UnixNano()
+		entry.priority = item.expireAt.UnixNano()
 		heap.Push(&c.pq, entry)
-	}
-
-	if ttl > 0 {
-		t := c.clock.Now().Add(ttl)
-		item.expireAt = t
-		entry.priority = t.UnixNano()
-		c.pq.update(entry.index)
 	}
 
 	return nil
@@ -61,30 +58,36 @@ func (c *simpleCache) evict(ctx context.Context, count int) {
 		return
 	}
 
+	cnt := 0
 	now := c.clock.Now()
 	if n := c.pq.Len(); n > 0 {
 		entry := c.pq[0]
 		if now.After(entry.item.expireAt) {
 			delete(c.items, entry.key)
 			heap.Pop(&c.pq)
-			return
+			cnt++
 		}
 	}
 
 	for k, v := range c.items {
+		if cnt >= count {
+			return
+		}
+
 		delete(c.items, k)
 		heap.Remove(&c.pq, v.index)
-		return
+		cnt++
 	}
 }
 
 func (c *simpleCache) get(ctx context.Context, key string) (interface{}, error) {
 	item, ok := c.items[key]
 	if ok {
-		if !item.IsExpired() {
+		if !item.IsExpired(c.clock) {
 			return item.value, nil
 		}
-		delete(c.items, key)
+		c.remove(ctx, key)
+		return nil, KeyExpiredError
 	}
 
 	return nil, KeyNotFoundError
@@ -95,7 +98,12 @@ func (c *simpleCache) has(ctx context.Context, key string) bool {
 	if !ok {
 		return false
 	}
-	return !item.IsExpired()
+
+	if item.IsExpired(c.clock) {
+		c.remove(ctx, key)
+		return false
+	}
+	return true
 }
 
 func (c *simpleCache) remove(ctx context.Context, key string) bool {
@@ -109,14 +117,13 @@ func (c *simpleCache) remove(ctx context.Context, key string) bool {
 }
 
 type simpleItem struct {
-	clock    Clock
 	value    interface{}
 	expireAt time.Time
 	index    int
 }
 
-func (si simpleItem) IsExpired() bool {
-	return si.expireAt.Before(si.clock.Now())
+func (si simpleItem) IsExpired(clock Clock) bool {
+	return si.expireAt.Before(clock.Now())
 }
 
 type simpleEntry struct {

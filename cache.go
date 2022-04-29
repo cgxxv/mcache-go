@@ -7,6 +7,7 @@ import (
 
 var (
 	KeyNotFoundError   = errors.New("mcache: key not found.")
+	KeyExpiredError    = errors.New("mcache: key expired.")
 	RedisNotFoundError = errors.New("mcache: redis not found.")
 	SerializeError     = errors.New("mcache: serialize error.")
 	KeyValueLenError   = errors.New("mcache: len of key != len of value.")
@@ -36,10 +37,6 @@ type (
 	MLoaderFunc func(context.Context, []string) (map[string]interface{}, error)
 
 	valPtrFunc func() interface{}
-)
-
-var (
-	runUnitTest = false
 )
 
 const (

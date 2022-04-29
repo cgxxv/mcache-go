@@ -1,6 +1,8 @@
 package mcache
 
 import (
+	"fmt"
+	"math/rand"
 	"reflect"
 	"unsafe"
 )
@@ -32,7 +34,7 @@ func stringToBytes(s *string) []byte {
 	))
 }
 
-func vderef(val interface{}) interface{} {
+func deref(val interface{}) interface{} {
 	vt := reflect.ValueOf(val)
 	for {
 		if vt.Kind() != reflect.Ptr {
@@ -41,4 +43,12 @@ func vderef(val interface{}) interface{} {
 
 		vt = vt.Elem()
 	}
+}
+
+func randString(l int) string {
+	buf := make([]byte, l)
+	for i := 0; i < (l+1)/2; i++ {
+		buf[i] = byte(rand.Intn(256))
+	}
+	return fmt.Sprintf("%x", buf)[:l]
 }

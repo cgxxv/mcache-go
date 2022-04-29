@@ -11,17 +11,13 @@ type Clock interface {
 	Now() time.Time
 }
 
-type RealClock struct {
+type realClock struct {
 	p unsafe.Pointer
 }
 
 func NewRealClock() Clock {
-	if runUnitTest {
-		return &RealClock{}
-	}
-
 	p := time.Now()
-	rc := &RealClock{
+	rc := &realClock{
 		p: unsafe.Pointer(&p),
 	}
 	go func() {
@@ -34,45 +30,38 @@ func NewRealClock() Clock {
 	return rc
 }
 
-func (rc *RealClock) Now() time.Time {
-	if runUnitTest {
-		return time.Now()
-	}
+func (rc *realClock) Now() time.Time {
 	return rc.now()
 }
 
-func (rc *RealClock) now() time.Time {
+func (rc *realClock) now() time.Time {
 	return *(*time.Time)(atomic.LoadPointer(&rc.p))
 }
 
 type FakeClock interface {
 	Clock
-
 	Advance(d time.Duration)
 }
 
 func NewFakeClock() FakeClock {
 	return &fakeclock{
-		// Taken from github.com/jonboulle/clockwork: use a fixture that does not fulfill Time.IsZero()
-		now: time.Date(1984, time.April, 4, 0, 0, 0, 0, time.UTC),
+		now: time.Now(),
 	}
 }
 
 type fakeclock struct {
 	now time.Time
-
-	mutex sync.RWMutex
+	sync.RWMutex
 }
 
 func (fc *fakeclock) Now() time.Time {
-	fc.mutex.RLock()
-	defer fc.mutex.RUnlock()
-	t := fc.now
-	return t
+	fc.RLock()
+	defer fc.RUnlock()
+	return fc.now
 }
 
 func (fc *fakeclock) Advance(d time.Duration) {
-	fc.mutex.Lock()
-	defer fc.mutex.Unlock()
+	fc.Lock()
+	defer fc.Unlock()
 	fc.now = fc.now.Add(d)
 }
