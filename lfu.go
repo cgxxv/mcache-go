@@ -20,7 +20,7 @@ type freqEntry struct {
 	items map[string]*lfuItem
 }
 
-func (c *LfuCache) init(clock Clock, capacity int) {
+func (c *LfuCache) Init(clock Clock, capacity int) {
 	c.clock = clock
 	c.items = make(map[string]lfuItem, capacity)
 	c.freqList = list.New()
@@ -31,7 +31,7 @@ func (c *LfuCache) init(clock Clock, capacity int) {
 	})
 }
 
-func (c *LfuCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+func (c *LfuCache) Set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
 	value := deref(val)
 	item, ok := c.items[key]
 	if ttl > 0 {
@@ -43,7 +43,7 @@ func (c *LfuCache) set(ctx context.Context, key string, val interface{}, ttl tim
 	if ok {
 		item.value = value
 	} else {
-		c.evict(ctx, 1)
+		c.Evict(ctx, 1)
 		item.key = key
 		item.value = value
 		item.freqElement = nil
@@ -59,7 +59,7 @@ func (c *LfuCache) set(ctx context.Context, key string, val interface{}, ttl tim
 	return nil
 }
 
-func (c *LfuCache) get(ctx context.Context, key string) (interface{}, error) {
+func (c *LfuCache) Get(ctx context.Context, key string) (interface{}, error) {
 	item, ok := c.items[key]
 	if ok {
 		if !item.IsExpired(c.clock) {
@@ -72,7 +72,7 @@ func (c *LfuCache) get(ctx context.Context, key string) (interface{}, error) {
 	return nil, KeyNotFoundError
 }
 
-func (c *LfuCache) evict(ctx context.Context, count int) {
+func (c *LfuCache) Evict(ctx context.Context, count int) {
 	if len(c.items) < c.cap {
 		return
 	}
@@ -94,7 +94,7 @@ func (c *LfuCache) evict(ctx context.Context, count int) {
 	}
 }
 
-func (c *LfuCache) has(ctx context.Context, key string) bool {
+func (c *LfuCache) Exists(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if !ok {
 		return false
@@ -108,7 +108,7 @@ func (c *LfuCache) has(ctx context.Context, key string) bool {
 	return true
 }
 
-func (c *LfuCache) remove(ctx context.Context, key string) bool {
+func (c *LfuCache) Remove(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if ok {
 		c.removeItem(&item)

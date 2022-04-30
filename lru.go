@@ -15,14 +15,14 @@ type LruCache struct {
 	sync.Mutex
 }
 
-func (c *LruCache) init(clock Clock, capacity int) {
+func (c *LruCache) Init(clock Clock, capacity int) {
 	c.clock = clock
 	c.items = make(map[string]*list.Element, capacity+1)
 	c.evictList = list.New()
 	c.cap = capacity
 }
 
-func (c *LruCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+func (c *LruCache) Set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
 	value := deref(val)
 	it, ok := c.items[key]
 	if ok {
@@ -35,7 +35,7 @@ func (c *LruCache) set(ctx context.Context, key string, val interface{}, ttl tim
 		}
 		c.evictList.MoveToFront(it)
 	} else {
-		c.evict(ctx, 1)
+		c.Evict(ctx, 1)
 		item := lruItem{
 			key:   key,
 			value: value,
@@ -51,7 +51,7 @@ func (c *LruCache) set(ctx context.Context, key string, val interface{}, ttl tim
 	return nil
 }
 
-func (c *LruCache) get(ctx context.Context, key string) (interface{}, error) {
+func (c *LruCache) Get(ctx context.Context, key string) (interface{}, error) {
 	item, ok := c.items[key]
 	if ok {
 		it := item.Value.(*lruItem)
@@ -64,7 +64,7 @@ func (c *LruCache) get(ctx context.Context, key string) (interface{}, error) {
 	return nil, KeyNotFoundError
 }
 
-func (c *LruCache) evict(ctx context.Context, count int) {
+func (c *LruCache) Evict(ctx context.Context, count int) {
 	if c.evictList.Len() < c.cap {
 		return
 	}
@@ -79,7 +79,7 @@ func (c *LruCache) evict(ctx context.Context, count int) {
 	}
 }
 
-func (c *LruCache) has(ctx context.Context, key string) bool {
+func (c *LruCache) Exists(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if !ok {
 		return false
@@ -92,7 +92,7 @@ func (c *LruCache) has(ctx context.Context, key string) bool {
 	return true
 }
 
-func (c *LruCache) remove(ctx context.Context, key string) bool {
+func (c *LruCache) Remove(ctx context.Context, key string) bool {
 	if ent, ok := c.items[key]; ok {
 		c.removeElement(ent)
 		return true

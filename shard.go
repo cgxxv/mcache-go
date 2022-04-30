@@ -3,19 +3,17 @@ package mcache
 import (
 	"context"
 	"errors"
-	"math/rand"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
 type CachePolicy[T any] interface {
-	init(clock Clock, capacity int)
-	set(ctx context.Context, key string, val interface{}, ttl time.Duration) error
-	get(ctx context.Context, key string) (interface{}, error)
-	has(ctx context.Context, key string) bool
-	remove(ctx context.Context, key string) bool
-	evict(ctx context.Context, count int)
+	Init(clock Clock, capacity int)
+	Set(ctx context.Context, key string, val interface{}, ttl time.Duration) error
+	Get(ctx context.Context, key string) (interface{}, error)
+	Exists(ctx context.Context, key string) bool
+	Remove(ctx context.Context, key string) bool
+	Evict(ctx context.Context, count int)
 
 	sync.Locker
 	*T
@@ -25,7 +23,6 @@ type cacheHandler[T any, P CachePolicy[T]] struct {
 	cache
 
 	shards []P
-	procs  int32
 }
 
 func newCacheHandler[T any, P CachePolicy[T]](b *builder[T, P]) Cache {
@@ -35,42 +32,14 @@ func newCacheHandler[T any, P CachePolicy[T]](b *builder[T, P]) Cache {
 	c.shards = make([]P, c.shardCount)
 	for i := 0; i < c.shardCount; i++ {
 		var p = P(new(T))
-		p.init(c.clock, c.shardCap)
+		p.Init(c.clock, c.shardCap)
 		c.shards[i] = p
 	}
 
-	c.purge()
 	return c
 }
 
-func (c *cacheHandler[T, P]) purge() {
-	const lockP = 50
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	go func() {
-		for {
-			for i := 0; i < c.shardCount; i++ {
-				if atomic.LoadInt32(&c.procs) != 0 {
-					continue
-				}
-				if r.Intn(100) >= lockP {
-					continue
-				}
-				s := c.shards[i]
-				s.Lock()
-				s.evict(nil, 1)
-				s.Unlock()
-			}
-
-			time.Sleep(time.Second)
-		}
-	}()
-}
-
 func (c *cacheHandler[T, P]) Set(ctx context.Context, key string, value interface{}, opts ...Option) error {
-	atomic.AddInt32(&c.procs, 1)
-	defer atomic.AddInt32(&c.procs, -1)
-
 	o := c.getOption(opts...)
 
 	if c.redisCli.Client != nil {
@@ -84,16 +53,13 @@ func (c *cacheHandler[T, P]) Set(ctx context.Context, key string, value interfac
 	s.Lock()
 	defer s.Unlock()
 
-	return s.set(ctx, key, value, o.TTL)
+	return s.Set(ctx, key, value, o.TTL)
 }
 
 func (c *cacheHandler[T, P]) MSet(ctx context.Context, keys []string, values []interface{}, opts ...Option) error {
 	if len(keys) != len(values) {
 		return KeyValueLenError
 	}
-
-	atomic.AddInt32(&c.procs, 1)
-	defer atomic.AddInt32(&c.procs, -1)
 
 	o := c.getOption(opts...)
 
@@ -107,7 +73,7 @@ func (c *cacheHandler[T, P]) MSet(ctx context.Context, keys []string, values []i
 	for i, k := range keys {
 		s := c.getShard(k)
 		s.Lock()
-		if err := s.set(ctx, k, values[i], o.TTL); err != nil {
+		if err := s.Set(ctx, k, values[i], o.TTL); err != nil {
 			s.Unlock()
 			return err
 		}
@@ -117,16 +83,13 @@ func (c *cacheHandler[T, P]) MSet(ctx context.Context, keys []string, values []i
 }
 
 func (c *cacheHandler[T, P]) Get(ctx context.Context, key string, opts ...Option) (interface{}, error) {
-	atomic.AddInt32(&c.procs, 1)
-	defer atomic.AddInt32(&c.procs, -1)
-
 	o := c.getOption(opts...)
 
 	s := c.getShard(key)
 	s.Lock()
 	defer s.Unlock()
 
-	val, err := s.get(ctx, key)
+	val, err := s.Get(ctx, key)
 	if err == KeyNotFoundError {
 		if o.RealLoaderFunc == nil {
 			return nil, KeyNotFoundError
@@ -142,7 +105,7 @@ func (c *cacheHandler[T, P]) Get(ctx context.Context, key string, opts ...Option
 				o.TTL = time.Minute
 			}
 
-			if err := s.set(ctx, key, val, o.TTL); err != nil {
+			if err := s.Set(ctx, key, val, o.TTL); err != nil {
 				return nil, err
 			}
 
@@ -156,9 +119,6 @@ func (c *cacheHandler[T, P]) Get(ctx context.Context, key string, opts ...Option
 }
 
 func (c *cacheHandler[T, P]) MGet(ctx context.Context, keys []string, opts ...Option) (map[string]interface{}, error) {
-	atomic.AddInt32(&c.procs, 1)
-	defer atomic.AddInt32(&c.procs, -1)
-
 	o := c.getOption(opts...)
 
 	res := make(map[string]interface{}, len(keys))
@@ -166,7 +126,7 @@ func (c *cacheHandler[T, P]) MGet(ctx context.Context, keys []string, opts ...Op
 	for _, key := range keys {
 		s := c.getShard(key)
 		s.Lock()
-		val, err := s.get(ctx, key)
+		val, err := s.Get(ctx, key)
 		if err == nil {
 			res[key] = val
 		} else if err == KeyNotFoundError {
@@ -192,7 +152,7 @@ func (c *cacheHandler[T, P]) MGet(ctx context.Context, keys []string, opts ...Op
 		for key, val := range kvs {
 			s := miss[key]
 			s.Lock()
-			err := s.set(ctx, key, val, o.TTL)
+			err := s.Set(ctx, key, val, o.TTL)
 			s.Unlock()
 			if err != nil {
 				goto END
@@ -214,14 +174,11 @@ func (c *cacheHandler[T, P]) Remove(ctx context.Context, key string) bool {
 		}
 	}
 
-	atomic.AddInt32(&c.procs, 1)
-	defer atomic.AddInt32(&c.procs, -1)
-
 	s := c.getShard(key)
 	s.Lock()
 	defer s.Unlock()
 
-	return s.remove(ctx, key)
+	return s.Remove(ctx, key)
 }
 
 func (c *cacheHandler[T, P]) MRemove(ctx context.Context, keys []string) bool {
@@ -232,13 +189,10 @@ func (c *cacheHandler[T, P]) MRemove(ctx context.Context, keys []string) bool {
 		}
 	}
 
-	atomic.AddInt32(&c.procs, 1)
-	defer atomic.AddInt32(&c.procs, -1)
-
 	for _, key := range keys {
 		s := c.getShard(key)
 		s.Lock()
-		if !s.remove(ctx, key) {
+		if !s.Remove(ctx, key) {
 			s.Unlock()
 			return false
 		}
@@ -249,26 +203,24 @@ func (c *cacheHandler[T, P]) MRemove(ctx context.Context, keys []string) bool {
 }
 
 func (c *cacheHandler[T, P]) Exists(ctx context.Context, key string) bool {
-	atomic.AddInt32(&c.procs, 1)
-	defer atomic.AddInt32(&c.procs, -1)
-
 	s := c.getShard(key)
 	s.Lock()
 	defer s.Unlock()
 
-	return s.has(ctx, key)
+	return s.Exists(ctx, key)
 }
 
 func (c *cacheHandler[T, P]) getShard(key string) P {
-	return c.shards[MemHashString(key)&uint64(c.shardCount-1)]
+	return c.shards[c.DebugShardIndex(key)]
 }
 
-func (c *cacheHandler[T, P]) getFromLocal2(ctx context.Context, key string, onLoad bool) (interface{}, error) {
-	atomic.AddInt32(&c.procs, 1)
-	defer atomic.AddInt32(&c.procs, -1)
+func (c *cacheHandler[T, P]) DebugShardIndex(key string) uint64 {
+	return MemHashString(key) & uint64(c.shardCount-1)
+}
 
+func (c *cacheHandler[T, P]) debugFromLocal2(ctx context.Context, key string, onLoad bool) (interface{}, error) {
 	s := c.getShard(key)
-	val, err := s.get(ctx, key)
+	val, err := s.Get(ctx, key)
 	if err != nil {
 		if !onLoad {
 		}
@@ -278,15 +230,12 @@ func (c *cacheHandler[T, P]) getFromLocal2(ctx context.Context, key string, onLo
 	return val, nil
 }
 
-func (c *cacheHandler[T, P]) getFromLocal(ctx context.Context, key string, onLoad bool) (interface{}, error) {
+func (c *cacheHandler[T, P]) debugFromLocal(ctx context.Context, key string, onLoad bool) (interface{}, error) {
 	s := c.getShard(key)
 	s.Lock()
 	defer s.Unlock()
 
-	atomic.AddInt32(&c.procs, 1)
-	defer atomic.AddInt32(&c.procs, -1)
-
-	val, err := s.get(ctx, key)
+	val, err := s.Get(ctx, key)
 	if err != nil {
 		if !onLoad {
 		}
@@ -296,19 +245,17 @@ func (c *cacheHandler[T, P]) getFromLocal(ctx context.Context, key string, onLoa
 	return val, nil
 }
 
-func (c *cacheHandler[T, P]) remove(ctx context.Context, key string) bool {
-	atomic.AddInt32(&c.procs, 1)
-	defer atomic.AddInt32(&c.procs, -1)
-
+func (c *cacheHandler[T, P]) debugRemove(ctx context.Context, key string) bool {
 	s := c.getShard(key)
 	s.Lock()
 	defer s.Unlock()
 
-	return s.remove(ctx, key)
+	return s.Remove(ctx, key)
 }
 
 func (c *cacheHandler[T, P]) serialize(ctx context.Context, val interface{}, opts ...Option) ([]byte, error) {
 	o := c.getOption(opts...)
+
 	if o.serializeFunc != nil {
 		return o.serializeFunc(ctx, val)
 	}
@@ -321,6 +268,7 @@ func (c *cacheHandler[T, P]) serialize(ctx context.Context, val interface{}, opt
 
 func (c *cacheHandler[T, P]) deserialize(ctx context.Context, data []byte, opts ...Option) (interface{}, error) {
 	o := c.getOption(opts...)
+
 	if o.deserializeFunc != nil {
 		return o.deserializeFunc(ctx, data)
 	}

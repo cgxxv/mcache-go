@@ -24,7 +24,6 @@ type cache struct {
 
 func (c *cache) getOption(opts ...Option) *options {
 	o := &options{
-		IsWait:          true,
 		TTL:             c.expiration,
 		LoaderFunc:      c.loaderFunc,
 		MLoaderFunc:     c.mLoaderFunc,

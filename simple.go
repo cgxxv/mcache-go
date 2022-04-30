@@ -15,14 +15,14 @@ type SimpleCache struct {
 	sync.Mutex
 }
 
-func (c *SimpleCache) init(clock Clock, capacity int) {
+func (c *SimpleCache) Init(clock Clock, capacity int) {
 	c.clock = clock
-	c.items = make(map[string]simpleItem, defaultShardCap)
-	c.pq = make(simplepq, 0, defaultShardCap)
+	c.items = make(map[string]simpleItem, capacity)
+	c.pq = make(simplepq, 0, capacity)
 	c.cap = capacity
 }
 
-func (c *SimpleCache) set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+func (c *SimpleCache) Set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
 	value := deref(val)
 	var entry = simpleEntry{
 		key: key,
@@ -40,7 +40,7 @@ func (c *SimpleCache) set(ctx context.Context, key string, val interface{}, ttl 
 		entry.priority = item.expireAt.UnixNano()
 		c.pq.update(entry.index)
 	} else {
-		c.evict(ctx, 1)
+		c.Evict(ctx, 1)
 		item.value = value
 		item.index = c.pq.Len()
 		c.items[key] = item
@@ -53,7 +53,7 @@ func (c *SimpleCache) set(ctx context.Context, key string, val interface{}, ttl 
 	return nil
 }
 
-func (c *SimpleCache) evict(ctx context.Context, count int) {
+func (c *SimpleCache) Evict(ctx context.Context, count int) {
 	if len(c.items) < c.cap {
 		return
 	}
@@ -62,9 +62,10 @@ func (c *SimpleCache) evict(ctx context.Context, count int) {
 	now := c.clock.Now()
 	if n := c.pq.Len(); n > 0 {
 		entry := c.pq[0]
-		if now.After(entry.item.expireAt) {
-			delete(c.items, entry.key)
+		item := c.items[entry.key]
+		if now.After(item.expireAt) {
 			heap.Pop(&c.pq)
+			delete(c.items, entry.key)
 			cnt++
 		}
 	}
@@ -74,43 +75,43 @@ func (c *SimpleCache) evict(ctx context.Context, count int) {
 			return
 		}
 
-		delete(c.items, k)
 		heap.Remove(&c.pq, v.index)
+		delete(c.items, k)
 		cnt++
 	}
 }
 
-func (c *SimpleCache) get(ctx context.Context, key string) (interface{}, error) {
+func (c *SimpleCache) Get(ctx context.Context, key string) (interface{}, error) {
 	item, ok := c.items[key]
 	if ok {
 		if !item.IsExpired(c.clock) {
 			return item.value, nil
 		}
-		c.remove(ctx, key)
+		c.Remove(ctx, key)
 		return nil, KeyExpiredError
 	}
 
 	return nil, KeyNotFoundError
 }
 
-func (c *SimpleCache) has(ctx context.Context, key string) bool {
+func (c *SimpleCache) Exists(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if !ok {
 		return false
 	}
 
 	if item.IsExpired(c.clock) {
-		c.remove(ctx, key)
+		c.Remove(ctx, key)
 		return false
 	}
 	return true
 }
 
-func (c *SimpleCache) remove(ctx context.Context, key string) bool {
+func (c *SimpleCache) Remove(ctx context.Context, key string) bool {
 	item, ok := c.items[key]
 	if ok {
-		delete(c.items, key)
 		heap.Remove(&c.pq, item.index)
+		delete(c.items, key)
 		return true
 	}
 	return false
@@ -159,10 +160,9 @@ func (pq *simplepq) Push(x interface{}) {
 func (pq *simplepq) Pop() interface{} {
 	old := *pq
 	n := len(old)
-	entry := old[n-1]
-	old[n-1] = simpleEntry{}
+	entry := old[0]
 	entry.index = -1
-	*pq = old[0 : n-1]
+	*pq = old[1:n]
 	return entry
 }
 

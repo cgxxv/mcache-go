@@ -19,7 +19,6 @@ type options struct {
 	RealLoaderFunc  LoaderFunc
 	MLoaderFunc     MLoaderFunc
 	RealMLoaderFunc MLoaderFunc
-	IsWait          bool
 	DefaultVal      interface{}
 
 	serializeFunc   serializeFunc
@@ -94,12 +93,6 @@ func WithLoaderFn(fn LoaderFunc) Option {
 func WithMLoaderFn(fn MLoaderFunc) Option {
 	return func(o *options) {
 		o.MLoaderFunc = fn
-	}
-}
-
-func WithIsWait(isWait bool) Option {
-	return func(o *options) {
-		o.IsWait = isWait
 	}
 }
 

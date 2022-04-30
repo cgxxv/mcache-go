@@ -2,40 +2,21 @@ package mcache
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
-	"unsafe"
 )
 
 type Clock interface {
 	Now() time.Time
 }
 
-type realClock struct {
-	p unsafe.Pointer
-}
+type realClock struct{}
 
 func NewRealClock() Clock {
-	p := time.Now()
-	rc := &realClock{
-		p: unsafe.Pointer(&p),
-	}
-	go func() {
-		for {
-			p := time.Now()
-			atomic.StorePointer(&rc.p, unsafe.Pointer(&p))
-			time.Sleep(100 * time.Millisecond)
-		}
-	}()
-	return rc
+	return realClock{}
 }
 
-func (rc *realClock) Now() time.Time {
-	return rc.now()
-}
-
-func (rc *realClock) now() time.Time {
-	return *(*time.Time)(atomic.LoadPointer(&rc.p))
+func (rc realClock) Now() time.Time {
+	return time.Now()
 }
 
 type FakeClock interface {
