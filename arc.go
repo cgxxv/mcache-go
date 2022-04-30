@@ -14,10 +14,10 @@ type ArcCache struct {
 	sync.Mutex
 
 	part int
-	t1   *arcList
-	t2   *arcList
-	b1   *arcList
-	b2   *arcList
+	t1   arcList
+	t2   arcList
+	b1   arcList
+	b2   arcList
 }
 
 func (c *ArcCache) Init(clock Clock, capacity int) {
@@ -203,8 +203,8 @@ type arcList struct {
 	keys map[string]*list.Element
 }
 
-func newArcCacheList(cap int) *arcList {
-	return &arcList{
+func newArcCacheList(cap int) arcList {
+	return arcList{
 		l:    list.New(),
 		keys: make(map[string]*list.Element, cap),
 	}

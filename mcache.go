@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"sync"
 	"time"
 )
 
@@ -20,20 +21,35 @@ type cache struct {
 
 	serializeFunc   serializeFunc
 	deserializeFunc deserializeFunc
+
+	p sync.Pool
 }
 
-func (c *cache) getOption(opts ...Option) *options {
-	o := &options{
-		TTL:             c.expiration,
-		LoaderFunc:      c.loaderFunc,
-		MLoaderFunc:     c.mLoaderFunc,
-		DefaultVal:      c.defaultVal,
-		serializeFunc:   c.serializeFunc,
-		deserializeFunc: c.deserializeFunc,
+func (c cache) getOpt() options {
+	o, ok := c.p.Get().(options)
+	if !ok {
+		panic("unreachable")
 	}
 
+	return o
+}
+
+func (c *cache) putOpt(o options) {
+	o.RedisCli = c.redisCli
+	o.TTL = c.expiration
+	o.LoaderFunc = c.loaderFunc
+	o.MLoaderFunc = c.mLoaderFunc
+	o.DefaultVal = c.defaultVal
+	o.serializeFunc = c.serializeFunc
+	o.deserializeFunc = c.deserializeFunc
+	c.p.Put(o)
+}
+
+func (c cache) getOption(opts ...Option) options {
+	o := c.getOpt()
+
 	for _, opt := range opts {
-		opt(o)
+		opt(&o)
 	}
 
 	if o.LoaderFunc == nil {
@@ -104,14 +120,12 @@ type builder[T any, P CachePolicy[T]] struct {
 }
 
 func New[T any, P CachePolicy[T]](size int, opts ...Option) Cache {
-	o := options{
-		RedisCli: RedisCli{},
-	}
+	o := options{}
 	for _, opt := range opts {
 		opt(&o)
 	}
 
-	b := &builder[T, P]{
+	b := builder[T, P]{
 		cache{
 			size:  size,
 			clock: NewRealClock(),
@@ -129,6 +143,20 @@ func New[T any, P CachePolicy[T]](size int, opts ...Option) Cache {
 		b.shardCap = defaultShardCap
 	}
 	b.formatByOpts(o)
+
+	b.p = sync.Pool{
+		New: func() interface{} {
+			return options{
+				RedisCli:        b.redisCli,
+				TTL:             b.expiration,
+				LoaderFunc:      b.loaderFunc,
+				MLoaderFunc:     b.mLoaderFunc,
+				DefaultVal:      b.defaultVal,
+				serializeFunc:   b.serializeFunc,
+				deserializeFunc: b.deserializeFunc,
+			}
+		},
+	}
 
 	return newCacheHandler(b)
 }

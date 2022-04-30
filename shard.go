@@ -25,7 +25,7 @@ type cacheHandler[T any, P CachePolicy[T]] struct {
 	shards []P
 }
 
-func newCacheHandler[T any, P CachePolicy[T]](b *builder[T, P]) Cache {
+func newCacheHandler[T any, P CachePolicy[T]](b builder[T, P]) Cache {
 	c := &cacheHandler[T, P]{}
 	c.cache = b.cache
 
@@ -39,8 +39,9 @@ func newCacheHandler[T any, P CachePolicy[T]](b *builder[T, P]) Cache {
 	return c
 }
 
-func (c *cacheHandler[T, P]) Set(ctx context.Context, key string, value interface{}, opts ...Option) error {
+func (c cacheHandler[T, P]) Set(ctx context.Context, key string, value interface{}, opts ...Option) error {
 	o := c.getOption(opts...)
+	defer c.putOpt(o)
 
 	if c.redisCli.Client != nil {
 		err := c.redisCli.set(ctx, key, value, o)
@@ -56,12 +57,13 @@ func (c *cacheHandler[T, P]) Set(ctx context.Context, key string, value interfac
 	return s.Set(ctx, key, value, o.TTL)
 }
 
-func (c *cacheHandler[T, P]) MSet(ctx context.Context, keys []string, values []interface{}, opts ...Option) error {
+func (c cacheHandler[T, P]) MSet(ctx context.Context, keys []string, values []interface{}, opts ...Option) error {
 	if len(keys) != len(values) {
 		return KeyValueLenError
 	}
 
 	o := c.getOption(opts...)
+	defer c.putOpt(o)
 
 	if c.redisCli.Client != nil {
 		err := c.redisCli.mset(ctx, keys, values, o)
@@ -82,8 +84,9 @@ func (c *cacheHandler[T, P]) MSet(ctx context.Context, keys []string, values []i
 	return nil
 }
 
-func (c *cacheHandler[T, P]) Get(ctx context.Context, key string, opts ...Option) (interface{}, error) {
+func (c cacheHandler[T, P]) Get(ctx context.Context, key string, opts ...Option) (interface{}, error) {
 	o := c.getOption(opts...)
+	defer c.putOpt(o)
 
 	s := c.getShard(key)
 	s.Lock()
@@ -118,8 +121,9 @@ func (c *cacheHandler[T, P]) Get(ctx context.Context, key string, opts ...Option
 	return val, nil
 }
 
-func (c *cacheHandler[T, P]) MGet(ctx context.Context, keys []string, opts ...Option) (map[string]interface{}, error) {
+func (c cacheHandler[T, P]) MGet(ctx context.Context, keys []string, opts ...Option) (map[string]interface{}, error) {
 	o := c.getOption(opts...)
+	defer c.putOpt(o)
 
 	res := make(map[string]interface{}, len(keys))
 	miss := make(map[string]P, len(keys))
@@ -166,7 +170,7 @@ END:
 	return res, nil
 }
 
-func (c *cacheHandler[T, P]) Remove(ctx context.Context, key string) bool {
+func (c cacheHandler[T, P]) Remove(ctx context.Context, key string) bool {
 	if c.redisCli.Client != nil {
 		err := c.redisCli.del(ctx, key)
 		if err != nil {
@@ -181,7 +185,7 @@ func (c *cacheHandler[T, P]) Remove(ctx context.Context, key string) bool {
 	return s.Remove(ctx, key)
 }
 
-func (c *cacheHandler[T, P]) MRemove(ctx context.Context, keys []string) bool {
+func (c cacheHandler[T, P]) MRemove(ctx context.Context, keys []string) bool {
 	if c.redisCli.Client != nil {
 		err := c.redisCli.mdel(ctx, keys)
 		if err != nil {
@@ -202,7 +206,7 @@ func (c *cacheHandler[T, P]) MRemove(ctx context.Context, keys []string) bool {
 	return true
 }
 
-func (c *cacheHandler[T, P]) Exists(ctx context.Context, key string) bool {
+func (c cacheHandler[T, P]) Exists(ctx context.Context, key string) bool {
 	s := c.getShard(key)
 	s.Lock()
 	defer s.Unlock()
@@ -210,15 +214,15 @@ func (c *cacheHandler[T, P]) Exists(ctx context.Context, key string) bool {
 	return s.Exists(ctx, key)
 }
 
-func (c *cacheHandler[T, P]) getShard(key string) P {
+func (c cacheHandler[T, P]) getShard(key string) P {
 	return c.shards[c.DebugShardIndex(key)]
 }
 
-func (c *cacheHandler[T, P]) DebugShardIndex(key string) uint64 {
+func (c cacheHandler[T, P]) DebugShardIndex(key string) uint64 {
 	return MemHashString(key) & uint64(c.shardCount-1)
 }
 
-func (c *cacheHandler[T, P]) debugFromLocal2(ctx context.Context, key string, onLoad bool) (interface{}, error) {
+func (c cacheHandler[T, P]) debugFromLocal2(ctx context.Context, key string, onLoad bool) (interface{}, error) {
 	s := c.getShard(key)
 	val, err := s.Get(ctx, key)
 	if err != nil {
@@ -230,7 +234,7 @@ func (c *cacheHandler[T, P]) debugFromLocal2(ctx context.Context, key string, on
 	return val, nil
 }
 
-func (c *cacheHandler[T, P]) debugFromLocal(ctx context.Context, key string, onLoad bool) (interface{}, error) {
+func (c cacheHandler[T, P]) debugFromLocal(ctx context.Context, key string, onLoad bool) (interface{}, error) {
 	s := c.getShard(key)
 	s.Lock()
 	defer s.Unlock()
@@ -245,7 +249,7 @@ func (c *cacheHandler[T, P]) debugFromLocal(ctx context.Context, key string, onL
 	return val, nil
 }
 
-func (c *cacheHandler[T, P]) debugRemove(ctx context.Context, key string) bool {
+func (c cacheHandler[T, P]) debugRemove(ctx context.Context, key string) bool {
 	s := c.getShard(key)
 	s.Lock()
 	defer s.Unlock()
@@ -253,8 +257,9 @@ func (c *cacheHandler[T, P]) debugRemove(ctx context.Context, key string) bool {
 	return s.Remove(ctx, key)
 }
 
-func (c *cacheHandler[T, P]) serialize(ctx context.Context, val interface{}, opts ...Option) ([]byte, error) {
+func (c cacheHandler[T, P]) serialize(ctx context.Context, val interface{}, opts ...Option) ([]byte, error) {
 	o := c.getOption(opts...)
+	defer c.putOpt(o)
 
 	if o.serializeFunc != nil {
 		return o.serializeFunc(ctx, val)
@@ -266,8 +271,9 @@ func (c *cacheHandler[T, P]) serialize(ctx context.Context, val interface{}, opt
 	return nil, errors.New("mcache: must set WithSafeValPtrFunc option!")
 }
 
-func (c *cacheHandler[T, P]) deserialize(ctx context.Context, data []byte, opts ...Option) (interface{}, error) {
+func (c cacheHandler[T, P]) deserialize(ctx context.Context, data []byte, opts ...Option) (interface{}, error) {
 	o := c.getOption(opts...)
+	defer c.putOpt(o)
 
 	if o.deserializeFunc != nil {
 		return o.deserializeFunc(ctx, data)

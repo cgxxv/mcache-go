@@ -10,9 +10,9 @@ import (
 
 func TestCache(t *testing.T) {
 	t.Run("simple cache", runCachePolicy[SimpleCache])
-	// t.Run("lfu cache", runCachePolicy[LfuCache])
-	// t.Run("lru cache", runCachePolicy[LruCache])
-	// t.Run("arc cache", runCachePolicy[ArcCache])
+	t.Run("lfu cache", runCachePolicy[LfuCache])
+	t.Run("lru cache", runCachePolicy[LruCache])
+	t.Run("arc cache", runCachePolicy[ArcCache])
 }
 
 func runCachePolicy[T any, P CachePolicy[T]](t *testing.T) {

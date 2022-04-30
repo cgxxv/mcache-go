@@ -20,7 +20,7 @@ type RedisCli struct {
 	*redis.Client
 }
 
-func (r *RedisCli) mget(ctx context.Context, keys []string, opt *options) (map[string]interface{}, error) {
+func (r *RedisCli) mget(ctx context.Context, keys []string, opt options) (map[string]interface{}, error) {
 	res := make(map[string]interface{}, len(keys))
 	if r.Client == nil {
 		return res, RedisNotFoundError
@@ -71,7 +71,7 @@ RESULT:
 	return res, nil
 }
 
-func (r *RedisCli) get(ctx context.Context, key string, opt *options) (interface{}, error) {
+func (r *RedisCli) get(ctx context.Context, key string, opt options) (interface{}, error) {
 	if r.Client == nil {
 		return nil, RedisNotFoundError
 	}
@@ -90,7 +90,7 @@ func (r *RedisCli) get(ctx context.Context, key string, opt *options) (interface
 	return nil, KeyNotFoundError
 }
 
-func (r *RedisCli) msetmap(ctx context.Context, kv map[string]interface{}, opt *options) error {
+func (r *RedisCli) msetmap(ctx context.Context, kv map[string]interface{}, opt options) error {
 
 	rks := make([]string, 0, len(kv))
 	rvs := make([]interface{}, 0, len(kv))
@@ -101,7 +101,7 @@ func (r *RedisCli) msetmap(ctx context.Context, kv map[string]interface{}, opt *
 	return r.mset(ctx, rks, rvs, opt)
 }
 
-func (r *RedisCli) mset(ctx context.Context, keys []string, values []interface{}, opt *options) error {
+func (r *RedisCli) mset(ctx context.Context, keys []string, values []interface{}, opt options) error {
 	if r.Client == nil {
 		return RedisNotFoundError
 	}
@@ -152,7 +152,7 @@ func (r *RedisCli) mset(ctx context.Context, keys []string, values []interface{}
 	return nil
 }
 
-func (r *RedisCli) set(ctx context.Context, key string, val interface{}, opt *options) error {
+func (r *RedisCli) set(ctx context.Context, key string, val interface{}, opt options) error {
 	if r.Client == nil {
 		return RedisNotFoundError
 	}
