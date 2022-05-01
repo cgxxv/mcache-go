@@ -3,7 +3,6 @@ package mcache
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 )
 
@@ -15,7 +14,6 @@ type CachePolicy[T any] interface {
 	Remove(ctx context.Context, key string) bool
 	Evict(ctx context.Context, count int)
 
-	sync.Locker
 	*T
 }
 
