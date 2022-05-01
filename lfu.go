@@ -32,6 +32,9 @@ func (c *LfuCache) Init(clock Clock, capacity int) {
 }
 
 func (c *LfuCache) Set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+	c.Lock()
+	defer c.Unlock()
+
 	value := deref(val)
 	item, ok := c.items[key]
 	if ttl > 0 {
@@ -43,7 +46,7 @@ func (c *LfuCache) Set(ctx context.Context, key string, val interface{}, ttl tim
 	if ok {
 		item.value = value
 	} else {
-		c.Evict(ctx, 1)
+		c.evict(ctx, 1)
 		item.key = key
 		item.value = value
 		item.freqElement = nil
@@ -60,6 +63,9 @@ func (c *LfuCache) Set(ctx context.Context, key string, val interface{}, ttl tim
 }
 
 func (c *LfuCache) Get(ctx context.Context, key string) (interface{}, error) {
+	c.Lock()
+	defer c.Unlock()
+
 	item, ok := c.items[key]
 	if ok {
 		if !item.IsExpired(c.clock) {
@@ -72,7 +78,43 @@ func (c *LfuCache) Get(ctx context.Context, key string) (interface{}, error) {
 	return nil, KeyNotFoundError
 }
 
+func (c *LfuCache) Exists(ctx context.Context, key string) bool {
+	c.Lock()
+	defer c.Unlock()
+
+	item, ok := c.items[key]
+	if !ok {
+		return false
+	}
+
+	if item.IsExpired(c.clock) {
+		c.removeItem(&item)
+		return false
+	}
+
+	return true
+}
+
+func (c *LfuCache) Remove(ctx context.Context, key string) bool {
+	c.Lock()
+	defer c.Unlock()
+
+	item, ok := c.items[key]
+	if ok {
+		c.removeItem(&item)
+		return true
+	}
+	return false
+}
+
 func (c *LfuCache) Evict(ctx context.Context, count int) {
+	c.Lock()
+	defer c.Unlock()
+
+	c.evict(ctx, count)
+}
+
+func (c *LfuCache) evict(ctx context.Context, count int) {
 	if len(c.items) < c.cap {
 		return
 	}
@@ -92,29 +134,6 @@ func (c *LfuCache) Evict(ctx context.Context, count int) {
 			entry = entry.Next()
 		}
 	}
-}
-
-func (c *LfuCache) Exists(ctx context.Context, key string) bool {
-	item, ok := c.items[key]
-	if !ok {
-		return false
-	}
-
-	if item.IsExpired(c.clock) {
-		c.removeItem(&item)
-		return false
-	}
-
-	return true
-}
-
-func (c *LfuCache) Remove(ctx context.Context, key string) bool {
-	item, ok := c.items[key]
-	if ok {
-		c.removeItem(&item)
-		return true
-	}
-	return false
 }
 
 func (c *LfuCache) removeItem(item *lfuItem) {

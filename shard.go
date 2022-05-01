@@ -50,11 +50,7 @@ func (c cacheHandler[T, P]) Set(ctx context.Context, key string, value interface
 		}
 	}
 
-	s := c.getShard(key)
-	s.Lock()
-	defer s.Unlock()
-
-	return s.Set(ctx, key, value, o.TTL)
+	return c.getShard(key).Set(ctx, key, value, o.TTL)
 }
 
 func (c cacheHandler[T, P]) MSet(ctx context.Context, keys []string, values []interface{}, opts ...Option) error {
@@ -73,13 +69,9 @@ func (c cacheHandler[T, P]) MSet(ctx context.Context, keys []string, values []in
 	}
 
 	for i, k := range keys {
-		s := c.getShard(k)
-		s.Lock()
-		if err := s.Set(ctx, k, values[i], o.TTL); err != nil {
-			s.Unlock()
+		if err := c.getShard(k).Set(ctx, k, values[i], o.TTL); err != nil {
 			return err
 		}
-		s.Unlock()
 	}
 	return nil
 }
@@ -89,8 +81,6 @@ func (c cacheHandler[T, P]) Get(ctx context.Context, key string, opts ...Option)
 	defer c.putOpt(o)
 
 	s := c.getShard(key)
-	s.Lock()
-	defer s.Unlock()
 
 	val, err := s.Get(ctx, key)
 	if err == KeyNotFoundError {
@@ -129,14 +119,12 @@ func (c cacheHandler[T, P]) MGet(ctx context.Context, keys []string, opts ...Opt
 	miss := make(map[string]P, len(keys))
 	for _, key := range keys {
 		s := c.getShard(key)
-		s.Lock()
 		val, err := s.Get(ctx, key)
 		if err == nil {
 			res[key] = val
 		} else if err == KeyNotFoundError {
 			miss[key] = s
 		}
-		s.Unlock()
 	}
 
 	if len(miss) > 0 {
@@ -155,9 +143,7 @@ func (c cacheHandler[T, P]) MGet(ctx context.Context, keys []string, opts ...Opt
 
 		for key, val := range kvs {
 			s := miss[key]
-			s.Lock()
 			err := s.Set(ctx, key, val, o.TTL)
-			s.Unlock()
 			if err != nil {
 				goto END
 			}
@@ -178,11 +164,7 @@ func (c cacheHandler[T, P]) Remove(ctx context.Context, key string) bool {
 		}
 	}
 
-	s := c.getShard(key)
-	s.Lock()
-	defer s.Unlock()
-
-	return s.Remove(ctx, key)
+	return c.getShard(key).Remove(ctx, key)
 }
 
 func (c cacheHandler[T, P]) MRemove(ctx context.Context, keys []string) bool {
@@ -194,24 +176,16 @@ func (c cacheHandler[T, P]) MRemove(ctx context.Context, keys []string) bool {
 	}
 
 	for _, key := range keys {
-		s := c.getShard(key)
-		s.Lock()
-		if !s.Remove(ctx, key) {
-			s.Unlock()
+		if !c.getShard(key).Remove(ctx, key) {
 			return false
 		}
-		s.Unlock()
 	}
 
 	return true
 }
 
 func (c cacheHandler[T, P]) Exists(ctx context.Context, key string) bool {
-	s := c.getShard(key)
-	s.Lock()
-	defer s.Unlock()
-
-	return s.Exists(ctx, key)
+	return c.getShard(key).Exists(ctx, key)
 }
 
 func (c cacheHandler[T, P]) getShard(key string) P {
@@ -222,39 +196,17 @@ func (c cacheHandler[T, P]) DebugShardIndex(key string) uint64 {
 	return MemHashString(key) & uint64(c.shardCount-1)
 }
 
-func (c cacheHandler[T, P]) debugFromLocal2(ctx context.Context, key string, onLoad bool) (interface{}, error) {
-	s := c.getShard(key)
-	val, err := s.Get(ctx, key)
+func (c cacheHandler[T, P]) debugLocalGet(ctx context.Context, key string) (interface{}, error) {
+	val, err := c.getShard(key).Get(ctx, key)
 	if err != nil {
-		if !onLoad {
-		}
 		return nil, err
 	}
 
 	return val, nil
 }
 
-func (c cacheHandler[T, P]) debugFromLocal(ctx context.Context, key string, onLoad bool) (interface{}, error) {
-	s := c.getShard(key)
-	s.Lock()
-	defer s.Unlock()
-
-	val, err := s.Get(ctx, key)
-	if err != nil {
-		if !onLoad {
-		}
-		return nil, err
-	}
-
-	return val, nil
-}
-
-func (c cacheHandler[T, P]) debugRemove(ctx context.Context, key string) bool {
-	s := c.getShard(key)
-	s.Lock()
-	defer s.Unlock()
-
-	return s.Remove(ctx, key)
+func (c cacheHandler[T, P]) debugLocalRemove(ctx context.Context, key string) bool {
+	return c.getShard(key).Remove(ctx, key)
 }
 
 func (c cacheHandler[T, P]) serialize(ctx context.Context, val interface{}, opts ...Option) ([]byte, error) {

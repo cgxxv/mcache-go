@@ -23,6 +23,9 @@ func (c *SimpleCache) Init(clock Clock, capacity int) {
 }
 
 func (c *SimpleCache) Set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+	c.Lock()
+	defer c.Unlock()
+
 	value := deref(val)
 	var entry = simpleEntry{
 		key: key,
@@ -40,7 +43,7 @@ func (c *SimpleCache) Set(ctx context.Context, key string, val interface{}, ttl 
 		entry.priority = item.expireAt.UnixNano()
 		c.pq.update(entry.index)
 	} else {
-		c.Evict(ctx, 1)
+		c.evict(ctx, 1)
 		item.value = value
 		item.index = c.pq.Len()
 		c.items[key] = item
@@ -53,7 +56,63 @@ func (c *SimpleCache) Set(ctx context.Context, key string, val interface{}, ttl 
 	return nil
 }
 
+func (c *SimpleCache) Get(ctx context.Context, key string) (interface{}, error) {
+	c.Lock()
+	defer c.Unlock()
+
+	item, ok := c.items[key]
+	if ok {
+		if !item.IsExpired(c.clock) {
+			return item.value, nil
+		}
+		c.remove(ctx, key)
+		return nil, KeyExpiredError
+	}
+
+	return nil, KeyNotFoundError
+}
+
+func (c *SimpleCache) Exists(ctx context.Context, key string) bool {
+	c.Lock()
+	defer c.Unlock()
+
+	item, ok := c.items[key]
+	if !ok {
+		return false
+	}
+
+	if item.IsExpired(c.clock) {
+		c.remove(ctx, key)
+		return false
+	}
+	return true
+}
+
+func (c *SimpleCache) Remove(ctx context.Context, key string) bool {
+	c.Lock()
+	defer c.Unlock()
+
+	return c.remove(ctx, key)
+}
+
 func (c *SimpleCache) Evict(ctx context.Context, count int) {
+	c.Lock()
+	defer c.Unlock()
+
+	c.evict(ctx, count)
+}
+
+func (c *SimpleCache) remove(ctx context.Context, key string) bool {
+	item, ok := c.items[key]
+	if ok {
+		heap.Remove(&c.pq, item.index)
+		delete(c.items, key)
+		return true
+	}
+	return false
+}
+
+func (c *SimpleCache) evict(ctx context.Context, count int) {
 	if len(c.items) < c.cap {
 		return
 	}
@@ -79,42 +138,6 @@ func (c *SimpleCache) Evict(ctx context.Context, count int) {
 		delete(c.items, k)
 		cnt++
 	}
-}
-
-func (c *SimpleCache) Get(ctx context.Context, key string) (interface{}, error) {
-	item, ok := c.items[key]
-	if ok {
-		if !item.IsExpired(c.clock) {
-			return item.value, nil
-		}
-		c.Remove(ctx, key)
-		return nil, KeyExpiredError
-	}
-
-	return nil, KeyNotFoundError
-}
-
-func (c *SimpleCache) Exists(ctx context.Context, key string) bool {
-	item, ok := c.items[key]
-	if !ok {
-		return false
-	}
-
-	if item.IsExpired(c.clock) {
-		c.Remove(ctx, key)
-		return false
-	}
-	return true
-}
-
-func (c *SimpleCache) Remove(ctx context.Context, key string) bool {
-	item, ok := c.items[key]
-	if ok {
-		heap.Remove(&c.pq, item.index)
-		delete(c.items, key)
-		return true
-	}
-	return false
 }
 
 type simpleItem struct {

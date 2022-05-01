@@ -33,6 +33,9 @@ func (c *ArcCache) Init(clock Clock, capacity int) {
 }
 
 func (c *ArcCache) Set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+	c.Lock()
+	defer c.Unlock()
+
 	value := deref(val)
 	item, ok := c.items[key]
 	if ttl > 0 {
@@ -50,7 +53,7 @@ func (c *ArcCache) Set(ctx context.Context, key string, val interface{}, ttl tim
 	}
 
 	defer func() {
-		c.Evict(ctx, 1)
+		c.evict(ctx, 1)
 		if c.t1.Has(key) || c.t2.Has(key) {
 			return
 		}
@@ -65,6 +68,9 @@ func (c *ArcCache) Set(ctx context.Context, key string, val interface{}, ttl tim
 }
 
 func (c *ArcCache) Get(ctx context.Context, key string) (interface{}, error) {
+	c.Lock()
+	defer c.Unlock()
+
 	item, ok := c.items[key]
 	if !ok {
 		return nil, KeyNotFoundError
@@ -72,7 +78,7 @@ func (c *ArcCache) Get(ctx context.Context, key string) (interface{}, error) {
 
 	c.update(ctx, key)
 	if item.IsExpired(c.clock) {
-		c.Remove(ctx, key)
+		c.remove(ctx, key)
 		return nil, KeyExpiredError
 	}
 
@@ -80,6 +86,9 @@ func (c *ArcCache) Get(ctx context.Context, key string) (interface{}, error) {
 }
 
 func (c *ArcCache) Exists(ctx context.Context, key string) bool {
+	c.Lock()
+	defer c.Unlock()
+
 	item, ok := c.items[key]
 	if !ok {
 		return false
@@ -87,13 +96,27 @@ func (c *ArcCache) Exists(ctx context.Context, key string) bool {
 
 	c.update(ctx, key)
 	if item.IsExpired(c.clock) {
-		c.Remove(ctx, key)
+		c.remove(ctx, key)
 		return false
 	}
 	return true
 }
 
 func (c *ArcCache) Remove(ctx context.Context, key string) bool {
+	c.Lock()
+	defer c.Unlock()
+
+	return c.remove(ctx, key)
+}
+
+func (c *ArcCache) Evict(ctx context.Context, count int) {
+	c.Lock()
+	defer c.Unlock()
+
+	c.evict(ctx, count)
+}
+
+func (c *ArcCache) remove(ctx context.Context, key string) bool {
 	delete(c.items, key)
 	if elt := c.b1.Lookup(key); elt != nil {
 		c.b1.Remove(key, elt)
@@ -115,7 +138,7 @@ func (c *ArcCache) Remove(ctx context.Context, key string) bool {
 	return false
 }
 
-func (c *ArcCache) Evict(ctx context.Context, count int) {
+func (c *ArcCache) evict(ctx context.Context, count int) {
 	if !c.isCacheFull() && c.t1.Len()+c.t2.Len() < c.cap {
 		return
 	}

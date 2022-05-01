@@ -23,6 +23,9 @@ func (c *LruCache) Init(clock Clock, capacity int) {
 }
 
 func (c *LruCache) Set(ctx context.Context, key string, val interface{}, ttl time.Duration) error {
+	c.Lock()
+	defer c.Unlock()
+
 	value := deref(val)
 	it, ok := c.items[key]
 	if ok {
@@ -35,7 +38,7 @@ func (c *LruCache) Set(ctx context.Context, key string, val interface{}, ttl tim
 		}
 		c.evictList.MoveToFront(it)
 	} else {
-		c.Evict(ctx, 1)
+		c.evict(ctx, 1)
 		item := lruItem{
 			key:   key,
 			value: value,
@@ -52,6 +55,9 @@ func (c *LruCache) Set(ctx context.Context, key string, val interface{}, ttl tim
 }
 
 func (c *LruCache) Get(ctx context.Context, key string) (interface{}, error) {
+	c.Lock()
+	defer c.Unlock()
+
 	item, ok := c.items[key]
 	if ok {
 		it := item.Value.(*lruItem)
@@ -64,22 +70,10 @@ func (c *LruCache) Get(ctx context.Context, key string) (interface{}, error) {
 	return nil, KeyNotFoundError
 }
 
-func (c *LruCache) Evict(ctx context.Context, count int) {
-	if c.evictList.Len() < c.cap {
-		return
-	}
-
-	for i := 0; i < count; i++ {
-		ent := c.evictList.Back()
-		if ent == nil {
-			return
-		} else {
-			c.removeElement(ent)
-		}
-	}
-}
-
 func (c *LruCache) Exists(ctx context.Context, key string) bool {
+	c.Lock()
+	defer c.Unlock()
+
 	item, ok := c.items[key]
 	if !ok {
 		return false
@@ -93,11 +87,36 @@ func (c *LruCache) Exists(ctx context.Context, key string) bool {
 }
 
 func (c *LruCache) Remove(ctx context.Context, key string) bool {
+	c.Lock()
+	defer c.Unlock()
+
 	if ent, ok := c.items[key]; ok {
 		c.removeElement(ent)
 		return true
 	}
 	return false
+}
+
+func (c *LruCache) Evict(ctx context.Context, count int) {
+	c.Lock()
+	defer c.Unlock()
+
+	c.evict(ctx, count)
+}
+
+func (c *LruCache) evict(ctx context.Context, count int) {
+	if c.evictList.Len() < c.cap {
+		return
+	}
+
+	for i := 0; i < count; i++ {
+		ent := c.evictList.Back()
+		if ent == nil {
+			return
+		} else {
+			c.removeElement(ent)
+		}
+	}
 }
 
 func (c *LruCache) removeElement(e *list.Element) {

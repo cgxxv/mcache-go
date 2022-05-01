@@ -27,9 +27,8 @@ type Cache interface {
 
 	//only for debug
 	DebugShardIndex(key string) uint64
-	debugFromLocal2(ctx context.Context, key string, onLoad bool) (interface{}, error)
-	debugFromLocal(ctx context.Context, key string, onLoad bool) (interface{}, error)
-	debugRemove(ctx context.Context, key string) bool
+	debugLocalGet(ctx context.Context, key string) (interface{}, error)
+	debugLocalRemove(ctx context.Context, key string) bool
 	serializer
 }
 
