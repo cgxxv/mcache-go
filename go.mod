@@ -1,4 +1,4 @@
-module github.com/cgxxv/mcache-go
+module github.com/cgxxv/mcache-go/v1
 
 go 1.18
 
