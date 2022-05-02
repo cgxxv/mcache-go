@@ -201,7 +201,8 @@ func (c *ArcCache) update(ctx context.Context, key string) {
 	if e := c.b2.Lookup(key); e != nil {
 		c.b2.Remove(key, e)
 		c.t1.PushFront(key)
-		if pop := c.t1.RemoveTail(); pop != "" {
+		if c.isCacheFull() && c.t1.Len() > 0 {
+			pop := c.t1.RemoveTail()
 			c.b1.PushFront(pop)
 		}
 	}
