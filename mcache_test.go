@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis"
-	"github.com/cgxxv/mcache-go/v1"
+	"github.com/cgxxv/mcache-go/v2"
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/assert"
 )
