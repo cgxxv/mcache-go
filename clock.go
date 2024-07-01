@@ -1,7 +1,6 @@
 package mcache
 
 import (
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -33,7 +32,6 @@ func NewFakeClock() FakeClock {
 
 type fakeclock struct {
 	now atomic.Value
-	sync.RWMutex
 }
 
 func (fc *fakeclock) Now() time.Time {
