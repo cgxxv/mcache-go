@@ -218,7 +218,7 @@ func (c cacheHandler[T, P]) serialize(ctx context.Context, val interface{}, opts
 	if c.serializeFunc != nil {
 		return c.serializeFunc(ctx, val)
 	}
-	return nil, errors.New("mcache: must set WithSafeValPtrFunc option!")
+	return nil, SerializeError
 }
 
 func (c cacheHandler[T, P]) deserialize(ctx context.Context, data []byte, opts ...Option) (interface{}, error) {
@@ -232,5 +232,5 @@ func (c cacheHandler[T, P]) deserialize(ctx context.Context, data []byte, opts .
 	if c.deserializeFunc != nil {
 		return c.deserializeFunc(ctx, data)
 	}
-	return nil, errors.New("mcache: must set WithSafeValPtrFunc option!")
+	return nil, SerializeError
 }

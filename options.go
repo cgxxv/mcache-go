@@ -70,7 +70,7 @@ func WithUnSafeValBind(valPtrFunc valuePtrFunc) Option {
 				obj = nil
 			}()
 			if ot.Kind() != reflect.Ptr {
-				return nil, errors.New("mcache: valPtrFn must return a pointer type!")
+				return nil, errors.New("mcache: valPtrFn for WithUnSafeValBind must return a pointer type!")
 			}
 
 			return s.unmarshal(ctx, data, obj)

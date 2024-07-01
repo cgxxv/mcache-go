@@ -9,7 +9,7 @@ var (
 	KeyNotFoundError     = errors.New("mcache: key not found.")
 	KeyExpiredError      = errors.New("mcache: key expired.")
 	RedisNotFoundError   = errors.New("mcache: redis not found.")
-	SerializeError       = errors.New("mcache: serialize error.")
+	SerializeError       = errors.New("mcache: must set WithSafeValPtrFunc option!")
 	KeyValueLenError     = errors.New("mcache: len of key != len of value.")
 	DefaultValueSetError = errors.New("mcache: set def val, 1min expiration.")
 )
