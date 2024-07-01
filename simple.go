@@ -35,7 +35,7 @@ func (c *SimpleCache) Set(ctx context.Context, key string, val interface{}, ttl 
 	if ttl > 0 {
 		item.expireAt = c.clock.Now().Add(ttl)
 	} else {
-		item.expireAt = c.clock.Now().Add(defaultExpireAt)
+		item.expireAt = c.clock.Now().Add(defaultExpiredAt)
 	}
 
 	if ok {

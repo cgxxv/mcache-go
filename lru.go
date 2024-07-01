@@ -34,7 +34,7 @@ func (c *LruCache) Set(ctx context.Context, key string, val interface{}, ttl tim
 		if ttl > 0 {
 			item.expireAt = c.clock.Now().Add(ttl)
 		} else {
-			item.expireAt = c.clock.Now().Add(defaultExpireAt)
+			item.expireAt = c.clock.Now().Add(defaultExpiredAt)
 		}
 		c.evictList.MoveToFront(it)
 	} else {
@@ -46,7 +46,7 @@ func (c *LruCache) Set(ctx context.Context, key string, val interface{}, ttl tim
 		if ttl > 0 {
 			item.expireAt = c.clock.Now().Add(ttl)
 		} else {
-			item.expireAt = c.clock.Now().Add(defaultExpireAt)
+			item.expireAt = c.clock.Now().Add(defaultExpiredAt)
 		}
 		c.items[key] = c.evictList.PushFront(&item)
 	}

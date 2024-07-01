@@ -88,11 +88,11 @@ func (c cacheHandler[T, P]) Get(ctx context.Context, key string, opts ...Option)
 
 		val, err := o.RealLoaderFunc(ctx, key)
 		if err != nil {
-			if !errors.Is(err, DefValSetError) {
+			if !errors.Is(err, DefaultValueSetError) {
 				return nil, err
 			}
 
-			if errors.Is(err, DefValSetError) {
+			if errors.Is(err, DefaultValueSetError) {
 				o.TTL = time.Minute
 			}
 
@@ -100,7 +100,7 @@ func (c cacheHandler[T, P]) Get(ctx context.Context, key string, opts ...Option)
 				return nil, err
 			}
 
-			if errors.Is(err, DefValSetError) {
+			if errors.Is(err, DefaultValueSetError) {
 				return val, err
 			}
 		}

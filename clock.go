@@ -2,6 +2,7 @@ package mcache
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -25,24 +26,26 @@ type FakeClock interface {
 }
 
 func NewFakeClock() FakeClock {
-	return &fakeclock{
-		now: time.Now(),
-	}
+	fc := &fakeclock{}
+	fc.now.Store(time.Now())
+	return fc
 }
 
 type fakeclock struct {
-	now time.Time
+	now atomic.Value
 	sync.RWMutex
 }
 
 func (fc *fakeclock) Now() time.Time {
-	fc.RLock()
-	defer fc.RUnlock()
-	return fc.now
+	return fc.now.Load().(time.Time)
 }
 
 func (fc *fakeclock) Advance(d time.Duration) {
-	fc.Lock()
-	defer fc.Unlock()
-	fc.now = fc.now.Add(d)
+	for {
+		current := fc.Now()
+		newTime := current.Add(d)
+		if fc.now.CompareAndSwap(current, newTime) {
+			return
+		}
+	}
 }

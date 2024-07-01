@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+var p sync.Pool
+
 type cache struct {
 	clock       Clock
 	size        int
@@ -21,12 +23,10 @@ type cache struct {
 
 	serializeFunc   serializeFunc
 	deserializeFunc deserializeFunc
-
-	p sync.Pool
 }
 
 func (c cache) getOpt() options {
-	o, ok := c.p.Get().(options)
+	o, ok := p.Get().(options)
 	if !ok {
 		panic("unreachable")
 	}
@@ -42,7 +42,7 @@ func (c *cache) putOpt(o options) {
 	o.DefaultVal = c.defaultVal
 	o.serializeFunc = c.serializeFunc
 	o.deserializeFunc = c.deserializeFunc
-	c.p.Put(o)
+	p.Put(o)
 }
 
 func (c cache) getOption(opts ...Option) options {
@@ -75,7 +75,7 @@ func (c cache) getOption(opts ...Option) options {
 				}
 				return v, nil
 			} else if o.DefaultVal != nil {
-				return o.DefaultVal, DefValSetError
+				return o.DefaultVal, DefaultValueSetError
 			}
 			return nil, err
 		}
@@ -144,7 +144,7 @@ func New[T any, P CachePolicy[T]](size int, opts ...Option) Cache {
 	}
 	b.formatByOpts(o)
 
-	b.p = sync.Pool{
+	p = sync.Pool{
 		New: func() interface{} {
 			return options{
 				RedisCli:        b.redisCli,
@@ -171,9 +171,7 @@ func (b *builder[T, P]) formatByOpts(o options) {
 	if o.TTL > 0 {
 		b.expiration = o.TTL
 	}
-	if &o.RedisCli != nil {
-		b.redisCli = o.RedisCli
-	}
+	b.redisCli = o.RedisCli
 	if o.serializeFunc != nil && o.deserializeFunc != nil {
 		b.serializeFunc = o.serializeFunc
 		b.deserializeFunc = o.deserializeFunc

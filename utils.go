@@ -7,20 +7,6 @@ import (
 	"unsafe"
 )
 
-func minInt(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
-}
-
-func maxInt(x, y int) int {
-	if x > y {
-		return x
-	}
-	return y
-}
-
 func bytesToString(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }

@@ -6,12 +6,12 @@ import (
 )
 
 var (
-	KeyNotFoundError   = errors.New("mcache: key not found.")
-	KeyExpiredError    = errors.New("mcache: key expired.")
-	RedisNotFoundError = errors.New("mcache: redis not found.")
-	SerializeError     = errors.New("mcache: serialize error.")
-	KeyValueLenError   = errors.New("mcache: len of key != len of value.")
-	DefValSetError     = errors.New("mcache: set def val, 1min expiration.")
+	KeyNotFoundError     = errors.New("mcache: key not found.")
+	KeyExpiredError      = errors.New("mcache: key expired.")
+	RedisNotFoundError   = errors.New("mcache: redis not found.")
+	SerializeError       = errors.New("mcache: serialize error.")
+	KeyValueLenError     = errors.New("mcache: len of key != len of value.")
+	DefaultValueSetError = errors.New("mcache: set def val, 1min expiration.")
 )
 
 type Cache interface {
@@ -36,12 +36,12 @@ type (
 	LoaderFunc  func(context.Context, string) (interface{}, error)
 	MLoaderFunc func(context.Context, []string) (map[string]interface{}, error)
 
-	valPtrFunc func() interface{}
+	valuePtrFunc func() interface{}
 )
 
 const (
 	defaultCacheSize  = 1 << 7                  //默认缓存容量
 	defaultShardCap   = 1 << 6                  //默认单片容量
 	defaultShardCount = 1 << 5                  //默认分片数量
-	defaultExpireAt   = 100 * 365 * 24 * 3600e9 //100years
+	defaultExpiredAt  = 100 * 365 * 24 * 3600e9 //100years
 )

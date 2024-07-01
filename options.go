@@ -31,7 +31,7 @@ func WithRedisClient(client *redis.Client) Option {
 	}
 }
 
-func WithUnSafeValBind(valPtrFunc valPtrFunc) Option {
+func WithUnSafeValBind(valPtrFunc valuePtrFunc) Option {
 	return func(o *options) {
 		var s = newMsgpackSerializer()
 		o.serializeFunc = func(ctx context.Context, val interface{}) (bs []byte, err error) {
